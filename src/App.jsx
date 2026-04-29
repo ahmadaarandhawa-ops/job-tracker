@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const SUPABASE_URL = "https://pvjmzycmvavmntbmudbc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Zoq88wvCDawDQET4LpAj4w_Mw6vDgRr";
@@ -13,6 +14,7 @@ const STATUS_STYLES = {
   Rejected: "bg-red-100 text-red-800",
   Withdrawn: "bg-gray-100 text-gray-700",
 };
+const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "" };
 
 export default function App() {
@@ -43,6 +45,15 @@ export default function App() {
     acc[s] = currentApps.filter(a => a.status === s).length;
     return acc;
   }, {});
+
+  // Chart data — applications per person
+  const chartData = people.map(person => ({
+    name: person,
+    applications: apps.filter(a => a.person === person).length,
+  }));
+
+  // Last application added
+  const lastApp = apps[0];
 
   function openAdd() { setForm(EMPTY); setEditId(null); setModal(true); }
 
@@ -87,10 +98,43 @@ export default function App() {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
         <div className="max-w-4xl mx-auto">
-          <div className="mb-8">
+          <div className="mb-6">
             <h1 className="text-3xl font-semibold text-gray-900">Job Trackers</h1>
             <p className="text-sm text-gray-500 mt-1">Click a tracker to view or add applications</p>
           </div>
+
+          {/* Last application headline */}
+          {lastApp && (
+            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-4 mb-6 flex items-center gap-3">
+              <span className="text-2xl">🔔</span>
+              <p className="text-sm text-indigo-900">
+                <span className="font-semibold">{lastApp.person}</span> just applied to{" "}
+                <span className="font-semibold">{lastApp.company}</span> for{" "}
+                <span className="font-semibold">{lastApp.role}</span>
+              </p>
+            </div>
+          )}
+
+          {/* Bar chart */}
+          {chartData.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-6">
+              <p className="text-sm font-medium text-gray-700 mb-4">Applications per person</p>
+              <ResponsiveContainer width="100%" height={180}>
+                <BarChart data={chartData} barSize={40}>
+                  <XAxis dataKey="name" tick={{ fontSize: 13 }} axisLine={false} tickLine={false} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <Tooltip cursor={{ fill: "#f3f4f6" }} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
+                  <Bar dataKey="applications" radius={[6, 6, 0, 0]}>
+                    {chartData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Tracker cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div onClick={() => setView("total")} className="bg-gray-900 text-white rounded-2xl p-5 cursor-pointer hover:bg-gray-700 transition-all">
               <p className="text-xs font-medium opacity-60 mb-1">Combined</p>
@@ -119,6 +163,7 @@ export default function App() {
             </div>
           </div>
         </div>
+
         {newTrackerModal && (
           <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-sm">
