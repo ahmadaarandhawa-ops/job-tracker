@@ -7,6 +7,7 @@ const SUPABASE_KEY = "sb_publishable_Zoq88wvCDawDQET4LpAj4w_Mw6vDgRr";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const STATUSES = ["Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
+const CHANCES = ["Why did I apply", "No Chance", "Maybe", "Good Chance"];
 const STATUS_STYLES = {
   Applied: "bg-blue-100 text-blue-800",
   Interview: "bg-yellow-100 text-yellow-800",
@@ -14,8 +15,28 @@ const STATUS_STYLES = {
   Rejected: "bg-red-100 text-red-800",
   Withdrawn: "bg-gray-100 text-gray-700",
 };
+const CHANCE_STYLES = {
+  "Why did I apply": "bg-purple-100 text-purple-800",
+  "No Chance": "bg-red-100 text-red-700",
+  "Maybe": "bg-yellow-100 text-yellow-800",
+  "Good Chance": "bg-green-100 text-green-800",
+};
 const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
-const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "" };
+const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "", chance: "" };
+
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const d = payload[0].payload;
+    return (
+      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", fontSize: 13 }}>
+        <p style={{ fontWeight: 600, marginBottom: 4 }}>{label}</p>
+        <p style={{ color: "#6366f1" }}>{d.applications} applications</p>
+        {d.rejectionPct > 0 && <p style={{ color: "#ef4444" }}>{d.rejectionPct}% rejected</p>}
+      </div>
+    );
+  }
+  return null;
+};
 
 export default function App() {
   const [apps, setApps] = useState([]);
@@ -46,19 +67,22 @@ export default function App() {
     return acc;
   }, {});
 
-  // Chart data — applications per person
-  const chartData = people.map(person => ({
-    name: person,
-    applications: apps.filter(a => a.person === person).length,
-  }));
+  const chartData = people.map(person => {
+    const personApps = apps.filter(a => a.person === person);
+    const rejected = personApps.filter(a => a.status === "Rejected").length;
+    return {
+      name: person,
+      applications: personApps.length,
+      rejectionPct: personApps.length > 0 ? Math.round((rejected / personApps.length) * 100) : 0,
+    };
+  });
 
-  // Last application added
   const lastApp = apps[0];
 
   function openAdd() { setForm(EMPTY); setEditId(null); setModal(true); }
 
   function openEdit(app) {
-    setForm({ company: app.company, role: app.role, status: app.status, date: app.date || "", notes: app.notes || "" });
+    setForm({ company: app.company, role: app.role, status: app.status, date: app.date || "", notes: app.notes || "", chance: app.chance || "" });
     setEditId(app.id);
     setModal(true);
   }
@@ -103,7 +127,6 @@ export default function App() {
             <p className="text-sm text-gray-500 mt-1">Click a tracker to view or add applications</p>
           </div>
 
-          {/* Last application headline */}
           {lastApp && (
             <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-4 mb-6 flex items-center gap-3">
               <span className="text-2xl">🔔</span>
@@ -115,15 +138,15 @@ export default function App() {
             </div>
           )}
 
-          {/* Bar chart */}
           {chartData.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-6">
-              <p className="text-sm font-medium text-gray-700 mb-4">Applications per person</p>
+              <p className="text-sm font-medium text-gray-700 mb-1">Applications per person</p>
+              <p className="text-xs text-gray-400 mb-4">Hover to see rejection rate</p>
               <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={chartData} barSize={40}>
                   <XAxis dataKey="name" tick={{ fontSize: 13 }} axisLine={false} tickLine={false} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <Tooltip cursor={{ fill: "#f3f4f6" }} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 13 }} />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f3f4f6" }} />
                   <Bar dataKey="applications" radius={[6, 6, 0, 0]}>
                     {chartData.map((_, i) => (
                       <Cell key={i} fill={COLORS[i % COLORS.length]} />
@@ -131,10 +154,15 @@ export default function App() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
+              {/* Rejection % labels */}
+              <div className="flex gap-4 mt-3 flex-wrap">
+                {chartData.map((d, i) => d.rejectionPct > 0 && (
+                  <span key={i} className="text-xs text-red-500 font-medium">{d.name}: {d.rejectionPct}% rejected</span>
+                ))}
+              </div>
             </div>
           )}
 
-          {/* Tracker cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div onClick={() => setView("total")} className="bg-gray-900 text-white rounded-2xl p-5 cursor-pointer hover:bg-gray-700 transition-all">
               <p className="text-xs font-medium opacity-60 mb-1">Combined</p>
@@ -214,30 +242,37 @@ export default function App() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Company</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Role</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Chance</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Date</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Notes</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={7} className="text-center py-12 text-gray-400">Loading...</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={7} className="text-center py-12 text-gray-400">No applications yet</td></tr>}
-              {filtered.map((app, i) => (
-                <tr key={app.id} className={`border-t border-gray-100 hover:bg-gray-50 ${i === 0 ? "border-t-0" : ""}`}>
-                  {view === "total" && <td className="px-4 py-3 font-medium text-gray-700">{app.person}</td>}
-                  <td className="px-4 py-3 font-medium text-gray-900">{app.company}</td>
-                  <td className="px-4 py-3 text-gray-600">{app.role}</td>
-                  <td className="px-4 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[app.status]}`}>{app.status}</span></td>
-                  <td className="px-4 py-3 text-gray-500">{fmt(app.date)}</td>
-                  <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{app.notes || "—"}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2 justify-end">
-                      {view !== "total" && <button onClick={() => openEdit(app)} className="text-xs text-gray-400 hover:text-gray-700">Edit</button>}
-                      <button onClick={() => remove(app.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {loading && <tr><td colSpan={8} className="text-center py-12 text-gray-400">Loading...</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={8} className="text-center py-12 text-gray-400">No applications yet</td></tr>}
+              {filtered.map((app, i) => {
+                const isRejected = app.status === "Rejected";
+                return (
+                  <tr key={app.id} className={`border-t border-gray-100 ${i === 0 ? "border-t-0" : ""} ${isRejected ? "bg-red-50 hover:bg-red-100" : "hover:bg-gray-50"}`}>
+                    {view === "total" && <td className="px-4 py-3 font-medium text-gray-700">{app.person}</td>}
+                    <td className={`px-4 py-3 font-medium ${isRejected ? "text-red-800 line-through" : "text-gray-900"}`}>{app.company}</td>
+                    <td className={`px-4 py-3 ${isRejected ? "text-red-600 line-through" : "text-gray-600"}`}>{app.role}</td>
+                    <td className="px-4 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[app.status]}`}>{app.status}</span></td>
+                    <td className="px-4 py-3">
+                      {app.chance ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${CHANCE_STYLES[app.chance] || "bg-gray-100 text-gray-600"}`}>{app.chance}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500">{fmt(app.date)}</td>
+                    <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{app.notes || "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2 justify-end">
+                        {view !== "total" && <button onClick={() => openEdit(app)} className="text-xs text-gray-400 hover:text-gray-700">Edit</button>}
+                        <button onClick={() => remove(app.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -250,6 +285,12 @@ export default function App() {
               <div><label className="block text-xs text-gray-500 mb-1">Company *</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="e.g. Google" /></div>
               <div><label className="block text-xs text-gray-500 mb-1">Role *</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} placeholder="e.g. Software Engineer" /></div>
               <div><label className="block text-xs text-gray-500 mb-1">Status</label><select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
+              <div><label className="block text-xs text-gray-500 mb-1">Chance</label>
+                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.chance} onChange={e => setForm({ ...form, chance: e.target.value })}>
+                  <option value="">— Select —</option>
+                  {CHANCES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
               <div><label className="block text-xs text-gray-500 mb-1">Date applied</label><input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
               <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Optional" /></div>
             </div>
