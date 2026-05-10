@@ -8,6 +8,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const STATUSES = ["Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
 const CHANCES = ["Why did I apply", "No Chance", "Maybe", "Good Chance"];
+const TYPES = ["Internship", "Graduate Scheme", "Placement", "Event", "Other"];
+const ROUNDS = ["Applied", "Online Test", "HireVue", "Phone Screen", "Assessment Centre", "Final Round", "Offer"];
+
 const STATUS_STYLES = {
   Applied: "bg-blue-100 text-blue-800",
   Interview: "bg-yellow-100 text-yellow-800",
@@ -21,8 +24,17 @@ const CHANCE_STYLES = {
   "Maybe": "bg-yellow-100 text-yellow-800",
   "Good Chance": "bg-green-100 text-green-800",
 };
+const ROUND_STYLES = {
+  "Applied": "bg-gray-100 text-gray-600",
+  "Online Test": "bg-blue-100 text-blue-700",
+  "HireVue": "bg-indigo-100 text-indigo-700",
+  "Phone Screen": "bg-cyan-100 text-cyan-700",
+  "Assessment Centre": "bg-orange-100 text-orange-700",
+  "Final Round": "bg-purple-100 text-purple-800",
+  "Offer": "bg-green-100 text-green-800",
+};
 const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
-const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "", chance: "" };
+const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "", chance: "", type: "", type_custom: "", round: "" };
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -37,6 +49,18 @@ const CustomTooltip = ({ active, payload, label }) => {
   }
   return null;
 };
+
+function fmtDateTime(ts) {
+  if (!ts) return "—";
+  const d = new Date(ts);
+  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function fmt(d) {
+  if (!d) return "—";
+  const [y, m, dd] = d.split("-");
+  return `${dd}/${m}/${y}`;
+}
 
 export default function App() {
   const [apps, setApps] = useState([]);
@@ -82,17 +106,23 @@ export default function App() {
   function openAdd() { setForm(EMPTY); setEditId(null); setModal(true); }
 
   function openEdit(app) {
-    setForm({ company: app.company, role: app.role, status: app.status, date: app.date || "", notes: app.notes || "", chance: app.chance || "" });
+    setForm({
+      company: app.company, role: app.role, status: app.status,
+      date: app.date || "", notes: app.notes || "", chance: app.chance || "",
+      type: app.type || "", type_custom: app.type_custom || "", round: app.round || ""
+    });
     setEditId(app.id);
     setModal(true);
   }
 
   async function save() {
     if (!form.company || !form.role) return;
+    const payload = { ...form };
+    if (form.type !== "Other") payload.type_custom = "";
     if (editId) {
-      await supabase.from("applications").update(form).eq("id", editId);
+      await supabase.from("applications").update(payload).eq("id", editId);
     } else {
-      await supabase.from("applications").insert({ ...form, person: view });
+      await supabase.from("applications").insert({ ...payload, person: view });
     }
     setModal(false);
     fetchAll();
@@ -112,10 +142,9 @@ export default function App() {
     setView(name);
   }
 
-  function fmt(d) {
-    if (!d) return "—";
-    const [y, m, dd] = d.split("-");
-    return `${dd}/${m}/${y}`;
+  function displayType(app) {
+    if (!app.type) return null;
+    return app.type === "Other" && app.type_custom ? app.type_custom : app.type;
   }
 
   if (view === "home") {
@@ -154,7 +183,6 @@ export default function App() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              {/* Rejection % labels */}
               <div className="flex gap-4 mt-3 flex-wrap">
                 {chartData.map((d, i) => d.rejectionPct > 0 && (
                   <span key={i} className="text-xs text-red-500 font-medium">{d.name}: {d.rejectionPct}% rejected</span>
@@ -163,7 +191,7 @@ export default function App() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
             <div onClick={() => setView("total")} className="bg-gray-900 text-white rounded-2xl p-5 cursor-pointer hover:bg-gray-700 transition-all">
               <p className="text-xs font-medium opacity-60 mb-1">Combined</p>
               <p className="text-xl font-semibold">Total Tracker</p>
@@ -190,6 +218,40 @@ export default function App() {
               <p className="text-sm font-medium">New tracker</p>
             </div>
           </div>
+
+          {/* Activity log */}
+          {apps.length > 0 && (
+            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-700">Activity Log</p>
+                <p className="text-xs text-gray-400 mt-0.5">Every application in order of when it was added</p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Person</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Applied to</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Role</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Status</th>
+                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Added at</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {apps.map((app, i) => (
+                    <tr key={app.id} className={`border-t border-gray-100 hover:bg-gray-50 ${i === 0 ? "border-t-0" : ""}`}>
+                      <td className="px-5 py-3 font-medium text-gray-900">{app.person}</td>
+                      <td className="px-5 py-3 text-gray-700">{app.company}</td>
+                      <td className="px-5 py-3 text-gray-500">{app.role}</td>
+                      <td className="px-5 py-3">
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[app.status]}`}>{app.status}</span>
+                      </td>
+                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDateTime(app.created_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         {newTrackerModal && (
@@ -210,7 +272,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => { setView("home"); setFilter("All"); }} className="text-sm text-gray-400 hover:text-gray-700">← Home</button>
           <span className="text-gray-300">/</span>
@@ -234,14 +296,16 @@ export default function App() {
             <button onClick={openAdd} className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-all">+ Add application</button>
           )}
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 {view === "total" && <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Person</th>}
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Company</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Role</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Type</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Round</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Chance</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Date</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Notes</th>
@@ -249,8 +313,8 @@ export default function App() {
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={8} className="text-center py-12 text-gray-400">Loading...</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={8} className="text-center py-12 text-gray-400">No applications yet</td></tr>}
+              {loading && <tr><td colSpan={10} className="text-center py-12 text-gray-400">Loading...</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={10} className="text-center py-12 text-gray-400">No applications yet</td></tr>}
               {filtered.map((app, i) => {
                 const isRejected = app.status === "Rejected";
                 return (
@@ -258,11 +322,17 @@ export default function App() {
                     {view === "total" && <td className="px-4 py-3 font-medium text-gray-700">{app.person}</td>}
                     <td className={`px-4 py-3 font-medium ${isRejected ? "text-red-800 line-through" : "text-gray-900"}`}>{app.company}</td>
                     <td className={`px-4 py-3 ${isRejected ? "text-red-600 line-through" : "text-gray-600"}`}>{app.role}</td>
+                    <td className="px-4 py-3">
+                      {displayType(app) ? <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">{displayType(app)}</span> : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-4 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[app.status]}`}>{app.status}</span></td>
+                    <td className="px-4 py-3">
+                      {app.round ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ROUND_STYLES[app.round] || "bg-gray-100 text-gray-600"}`}>{app.round}</span> : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-4 py-3">
                       {app.chance ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${CHANCE_STYLES[app.chance] || "bg-gray-100 text-gray-600"}`}>{app.chance}</span> : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{fmt(app.date)}</td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmt(app.date)}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{app.notes || "—"}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 justify-end">
@@ -284,7 +354,24 @@ export default function App() {
             <div className="space-y-3">
               <div><label className="block text-xs text-gray-500 mb-1">Company *</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="e.g. Google" /></div>
               <div><label className="block text-xs text-gray-500 mb-1">Role *</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} placeholder="e.g. Software Engineer" /></div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Type</label>
+                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                  <option value="">— Select —</option>
+                  {TYPES.map(t => <option key={t}>{t}</option>)}
+                </select>
+              </div>
+              {form.type === "Other" && (
+                <div><label className="block text-xs text-gray-500 mb-1">Custom type</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.type_custom} onChange={e => setForm({ ...form, type_custom: e.target.value })} placeholder="e.g. Spring Week" /></div>
+              )}
               <div><label className="block text-xs text-gray-500 mb-1">Status</label><select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Round</label>
+                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.round} onChange={e => setForm({ ...form, round: e.target.value })}>
+                  <option value="">— Select —</option>
+                  {ROUNDS.map(r => <option key={r}>{r}</option>)}
+                </select>
+              </div>
               <div><label className="block text-xs text-gray-500 mb-1">Chance</label>
                 <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.chance} onChange={e => setForm({ ...form, chance: e.target.value })}>
                   <option value="">— Select —</option>
