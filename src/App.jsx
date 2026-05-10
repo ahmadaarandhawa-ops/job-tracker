@@ -10,6 +10,8 @@ const STATUSES = ["Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
 const CHANCES = ["Why did I apply", "No Chance", "Maybe", "Good Chance"];
 const TYPES = ["Internship", "Graduate Scheme", "Placement", "Event", "Other"];
 const ROUNDS = ["Applied", "Online Test", "HireVue", "Phone Screen", "Assessment Centre", "Final Round", "Offer"];
+const ALIGNMENTS = ["Not Aligned", "Somewhat", "Aligned", "Strongly Aligned"];
+const IMPACTS = ["Low", "Medium", "High", "Very High"];
 
 const STATUS_STYLES = {
   Applied: "bg-blue-100 text-blue-800",
@@ -33,8 +35,20 @@ const ROUND_STYLES = {
   "Final Round": "bg-purple-100 text-purple-800",
   "Offer": "bg-green-100 text-green-800",
 };
+const ALIGNMENT_STYLES = {
+  "Not Aligned": "bg-red-100 text-red-700",
+  "Somewhat": "bg-yellow-100 text-yellow-700",
+  "Aligned": "bg-blue-100 text-blue-700",
+  "Strongly Aligned": "bg-green-100 text-green-800",
+};
+const IMPACT_STYLES = {
+  "Low": "bg-gray-100 text-gray-600",
+  "Medium": "bg-yellow-100 text-yellow-700",
+  "High": "bg-orange-100 text-orange-700",
+  "Very High": "bg-green-100 text-green-800",
+};
 const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
-const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "", chance: "", type: "", type_custom: "", round: "" };
+const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "", chance: "", type: "", type_custom: "", round: "", alignment: "", impact: "" };
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
@@ -72,6 +86,7 @@ export default function App() {
   const [newName, setNewName] = useState("");
   const [form, setForm] = useState(EMPTY);
   const [editId, setEditId] = useState(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => { fetchAll(); }, []);
 
@@ -107,9 +122,17 @@ export default function App() {
 
   function openEdit(app) {
     setForm({
-      company: app.company, role: app.role, status: app.status,
-      date: app.date || "", notes: app.notes || "", chance: app.chance || "",
-      type: app.type || "", type_custom: app.type_custom || "", round: app.round || ""
+      company: app.company || "",
+      role: app.role || "",
+      status: app.status || "Applied",
+      date: app.date || "",
+      notes: app.notes || "",
+      chance: app.chance || "",
+      type: app.type || "",
+      type_custom: app.type_custom || "",
+      round: app.round || "",
+      alignment: app.alignment || "",
+      impact: app.impact || "",
     });
     setEditId(app.id);
     setModal(true);
@@ -117,14 +140,26 @@ export default function App() {
 
   async function save() {
     if (!form.company || !form.role) return;
+    setSaving(true);
     const payload = { ...form };
     if (form.type !== "Other") payload.type_custom = "";
+
+    let error;
     if (editId) {
-      await supabase.from("applications").update(payload).eq("id", editId);
+      const res = await supabase.from("applications").update(payload).eq("id", editId);
+      error = res.error;
     } else {
-      await supabase.from("applications").insert({ ...payload, person: view });
+      const res = await supabase.from("applications").insert({ ...payload, person: view });
+      error = res.error;
+    }
+
+    setSaving(false);
+    if (error) {
+      alert("Save failed: " + error.message);
+      return;
     }
     setModal(false);
+    setEditId(null);
     fetchAll();
   }
 
@@ -219,7 +254,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Activity log */}
           {apps.length > 0 && (
             <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
               <div className="px-5 py-4 border-b border-gray-100">
@@ -272,7 +306,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
           <button onClick={() => { setView("home"); setFilter("All"); }} className="text-sm text-gray-400 hover:text-gray-700">← Home</button>
           <span className="text-gray-300">/</span>
@@ -307,14 +341,16 @@ export default function App() {
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Status</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Round</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Chance</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Values</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Impact</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Date</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Notes</th>
                 <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td colSpan={10} className="text-center py-12 text-gray-400">Loading...</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={10} className="text-center py-12 text-gray-400">No applications yet</td></tr>}
+              {loading && <tr><td colSpan={12} className="text-center py-12 text-gray-400">Loading...</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={12} className="text-center py-12 text-gray-400">No applications yet</td></tr>}
               {filtered.map((app, i) => {
                 const isRejected = app.status === "Rejected";
                 return (
@@ -332,6 +368,12 @@ export default function App() {
                     <td className="px-4 py-3">
                       {app.chance ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${CHANCE_STYLES[app.chance] || "bg-gray-100 text-gray-600"}`}>{app.chance}</span> : <span className="text-gray-300">—</span>}
                     </td>
+                    <td className="px-4 py-3">
+                      {app.alignment ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ALIGNMENT_STYLES[app.alignment] || "bg-gray-100 text-gray-600"}`}>{app.alignment}</span> : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {app.impact ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${IMPACT_STYLES[app.impact] || "bg-gray-100 text-gray-600"}`}>{app.impact}</span> : <span className="text-gray-300">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmt(app.date)}</td>
                     <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{app.notes || "—"}</td>
                     <td className="px-4 py-3">
@@ -348,8 +390,8 @@ export default function App() {
         </div>
       </div>
       {modal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md shadow-xl">
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md shadow-xl my-8">
             <h2 className="text-base font-semibold mb-4">{editId ? "Edit application" : "Add application"}</h2>
             <div className="space-y-3">
               <div><label className="block text-xs text-gray-500 mb-1">Company *</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="e.g. Google" /></div>
@@ -372,18 +414,35 @@ export default function App() {
                   {ROUNDS.map(r => <option key={r}>{r}</option>)}
                 </select>
               </div>
-              <div><label className="block text-xs text-gray-500 mb-1">Chance</label>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Chance</label>
                 <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.chance} onChange={e => setForm({ ...form, chance: e.target.value })}>
                   <option value="">— Select —</option>
                   {CHANCES.map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Values Alignment</label>
+                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.alignment} onChange={e => setForm({ ...form, alignment: e.target.value })}>
+                  <option value="">— Select —</option>
+                  {ALIGNMENTS.map(a => <option key={a}>{a}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Potential for Impact</label>
+                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.impact} onChange={e => setForm({ ...form, impact: e.target.value })}>
+                  <option value="">— Select —</option>
+                  {IMPACTS.map(i => <option key={i}>{i}</option>)}
                 </select>
               </div>
               <div><label className="block text-xs text-gray-500 mb-1">Date applied</label><input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
               <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Optional" /></div>
             </div>
             <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => setModal(false)} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={save} className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-700">Save</button>
+              <button onClick={() => { setModal(false); setEditId(null); }} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
+              <button onClick={save} disabled={saving} className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
+                {saving ? "Saving..." : "Save"}
+              </button>
             </div>
           </div>
         </div>
