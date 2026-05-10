@@ -331,21 +331,35 @@ export default function App() {
           )}
         </div>
         <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="text-sm" style={{width:"100%", tableLayout:"fixed"}}>
+            <colgroup>
+              {view === "total" && <col style={{width:"90px"}}/>}
+              <col style={{width:"130px"}}/>
+              <col style={{width:"160px"}}/>
+              <col style={{width:"100px"}}/>
+              <col style={{width:"90px"}}/>
+              <col style={{width:"130px"}}/>
+              <col style={{width:"110px"}}/>
+              <col style={{width:"120px"}}/>
+              <col style={{width:"90px"}}/>
+              <col style={{width:"95px"}}/>
+              <col style={{width:"130px"}}/>
+              <col style={{width:"80px"}}/>
+            </colgroup>
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                {view === "total" && <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Person</th>}
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Company</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Role</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Type</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Round</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Chance</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Values</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Impact</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Date</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-500">Notes</th>
-                <th className="px-4 py-3"></th>
+                {view === "total" && <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Person</th>}
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Company</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Role</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Type</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Status</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Round</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Chance</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Values</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Impact</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Date</th>
+                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Notes</th>
+                <th className="px-3 py-2"></th>
               </tr>
             </thead>
             <tbody>
@@ -355,31 +369,31 @@ export default function App() {
                 const isRejected = app.status === "Rejected";
                 return (
                   <tr key={app.id} className={`border-t border-gray-100 ${i === 0 ? "border-t-0" : ""} ${isRejected ? "bg-red-50 hover:bg-red-100" : "hover:bg-gray-50"}`}>
-                    {view === "total" && <td className="px-4 py-3 font-medium text-gray-700">{app.person}</td>}
-                    <td className={`px-4 py-3 font-medium ${isRejected ? "text-red-800 line-through" : "text-gray-900"}`}>{app.company}</td>
-                    <td className={`px-4 py-3 ${isRejected ? "text-red-600 line-through" : "text-gray-600"}`}>{app.role}</td>
-                    <td className="px-4 py-3">
-                      {displayType(app) ? <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-gray-100 text-gray-700">{displayType(app)}</span> : <span className="text-gray-300">—</span>}
+                    {view === "total" && <td className="px-3 py-2 font-medium text-gray-700 truncate">{app.person}</td>}
+                    <td className={`px-3 py-2 font-medium truncate ${isRejected ? "text-red-800 line-through" : "text-gray-900"}`} title={app.company}>{app.company}</td>
+                    <td className={`px-3 py-2 truncate ${isRejected ? "text-red-600 line-through" : "text-gray-600"}`} title={app.role}>{app.role}</td>
+                    <td className="px-3 py-2">
+                      {displayType(app) ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 truncate block w-fit max-w-full">{displayType(app)}</span> : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3"><span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[app.status]}`}>{app.status}</span></td>
-                    <td className="px-4 py-3">
-                      {app.round ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ROUND_STYLES[app.round] || "bg-gray-100 text-gray-600"}`}>{app.round}</span> : <span className="text-gray-300">—</span>}
+                    <td className="px-3 py-2"><span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_STYLES[app.status]}`}>{app.status}</span></td>
+                    <td className="px-3 py-2">
+                      {app.round ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${ROUND_STYLES[app.round] || "bg-gray-100 text-gray-600"}`}>{app.round}</span> : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3">
-                      {app.chance ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${CHANCE_STYLES[app.chance] || "bg-gray-100 text-gray-600"}`}>{app.chance}</span> : <span className="text-gray-300">—</span>}
+                    <td className="px-3 py-2">
+                      {app.chance ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${CHANCE_STYLES[app.chance] || "bg-gray-100 text-gray-600"}`}>{app.chance}</span> : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3">
-                      {app.alignment ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${ALIGNMENT_STYLES[app.alignment] || "bg-gray-100 text-gray-600"}`}>{app.alignment}</span> : <span className="text-gray-300">—</span>}
+                    <td className="px-3 py-2">
+                      {app.alignment ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${ALIGNMENT_STYLES[app.alignment] || "bg-gray-100 text-gray-600"}`}>{app.alignment}</span> : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3">
-                      {app.impact ? <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${IMPACT_STYLES[app.impact] || "bg-gray-100 text-gray-600"}`}>{app.impact}</span> : <span className="text-gray-300">—</span>}
+                    <td className="px-3 py-2">
+                      {app.impact ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${IMPACT_STYLES[app.impact] || "bg-gray-100 text-gray-600"}`}>{app.impact}</span> : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmt(app.date)}</td>
-                    <td className="px-4 py-3 text-gray-500 max-w-xs truncate">{app.notes || "—"}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 justify-end">
-                        {view !== "total" && <button onClick={() => openEdit(app)} className="text-xs text-gray-400 hover:text-gray-700">Edit</button>}
-                        <button onClick={() => remove(app.id)} className="text-xs text-red-400 hover:text-red-600">Delete</button>
+                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{fmt(app.date)}</td>
+                    <td className="px-3 py-2 text-gray-500 truncate text-xs" title={app.notes}>{app.notes || "—"}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-1 justify-end">
+                        {view !== "total" && <button onClick={() => openEdit(app)} className="text-xs text-gray-400 hover:text-gray-700 whitespace-nowrap">Edit</button>}
+                        <button onClick={() => remove(app.id)} className="text-xs text-red-400 hover:text-red-600 whitespace-nowrap">Delete</button>
                       </div>
                     </td>
                   </tr>
