@@ -1,461 +1,549 @@
 import { useState, useEffect } from "react";
+import {
+  ClerkProvider,
+  SignedIn,
+  SignedOut,
+  SignIn,
+  useUser,
+  UserButton,
+} from "@clerk/clerk-react";
 import { createClient } from "@supabase/supabase-js";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
+const PUBLISHABLE_KEY = "pk_test_bWFpbi1jb3JhbC00OS5jbGVyay5hY2NvdW50cy5kZXYk";
 const SUPABASE_URL = "https://pvjmzycmvavmntbmudbc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Zoq88wvCDawDQET4LpAj4w_Mw6vDgRr";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const STATUSES = ["Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
-const CHANCES = ["Why did I apply", "No Chance", "Maybe", "Good Chance"];
-const TYPES = ["Internship", "Graduate Scheme", "Placement", "Event", "Other"];
-const ROUNDS = ["Applied", "Online Test", "HireVue", "Phone Screen", "Assessment Centre", "Final Round", "Offer"];
-const ALIGNMENTS = ["Not Aligned", "Somewhat", "Aligned", "Strongly Aligned"];
-const IMPACTS = ["Low", "Medium", "High", "Very High"];
+const ALIGNMENT = ["", "Reaches", "Good Fit", "Dream", "Safety"];
+const IMPACT = ["", "Low", "Medium", "High"];
 
-const STATUS_STYLES = {
-  Applied: "bg-blue-100 text-blue-800",
-  Interview: "bg-yellow-100 text-yellow-800",
-  Offer: "bg-green-100 text-green-800",
-  Rejected: "bg-red-100 text-red-800",
-  Withdrawn: "bg-gray-100 text-gray-700",
-};
-const CHANCE_STYLES = {
-  "Why did I apply": "bg-purple-100 text-purple-800",
-  "No Chance": "bg-red-100 text-red-700",
-  "Maybe": "bg-yellow-100 text-yellow-800",
-  "Good Chance": "bg-green-100 text-green-800",
-};
-const ROUND_STYLES = {
-  "Applied": "bg-gray-100 text-gray-600",
-  "Online Test": "bg-blue-100 text-blue-700",
-  "HireVue": "bg-indigo-100 text-indigo-700",
-  "Phone Screen": "bg-cyan-100 text-cyan-700",
-  "Assessment Centre": "bg-orange-100 text-orange-700",
-  "Final Round": "bg-purple-100 text-purple-800",
-  "Offer": "bg-green-100 text-green-800",
-};
-const ALIGNMENT_STYLES = {
-  "Not Aligned": "bg-red-100 text-red-700",
-  "Somewhat": "bg-yellow-100 text-yellow-700",
-  "Aligned": "bg-blue-100 text-blue-700",
-  "Strongly Aligned": "bg-green-100 text-green-800",
-};
-const IMPACT_STYLES = {
-  "Low": "bg-gray-100 text-gray-600",
-  "Medium": "bg-yellow-100 text-yellow-700",
-  "High": "bg-orange-100 text-orange-700",
-  "Very High": "bg-green-100 text-green-800",
-};
-const COLORS = ["#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
-const EMPTY = { company: "", role: "", status: "Applied", date: "", notes: "", chance: "", type: "", type_custom: "", round: "", alignment: "", impact: "" };
-
-const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    const d = payload[0].payload;
-    return (
-      <div style={{ background: "white", border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 14px", fontSize: 13 }}>
-        <p style={{ fontWeight: 600, marginBottom: 4 }}>{label}</p>
-        <p style={{ color: "#6366f1" }}>{d.applications} applications</p>
-        {d.rejectionPct > 0 && <p style={{ color: "#ef4444" }}>{d.rejectionPct}% rejected</p>}
-      </div>
-    );
-  }
-  return null;
+const STATUS_COLORS = {
+  Applied: { bg: "#e8f4fd", text: "#1a6fa8", border: "#b8d9f0" },
+  Interview: { bg: "#fef3e2", text: "#b45309", border: "#fcd88a" },
+  Offer: { bg: "#e6f9f0", text: "#166534", border: "#86efac" },
+  Rejected: { bg: "#fde8e8", text: "#991b1b", border: "#fca5a5" },
+  Withdrawn: { bg: "#f3f4f6", text: "#4b5563", border: "#d1d5db" },
 };
 
-function fmtDateTime(ts) {
-  if (!ts) return "—";
-  const d = new Date(ts);
-  return d.toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
+const EMPTY_FORM = { company: "", role: "", status: "Applied", date: "", notes: "", alignment: "", impact: "" };
 
 function fmt(d) {
   if (!d) return "—";
-  const [y, m, dd] = d.split("-");
-  return `${dd}/${m}/${y}`;
+  const date = new Date(d);
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// ─── Main App Shell ───────────────────────────────────────────────────────────
 export default function App() {
-  const [apps, setApps] = useState([]);
+  return (
+    <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
+      <SignedOut>
+        <LoginPage />
+      </SignedOut>
+      <SignedIn>
+        <Tracker />
+      </SignedIn>
+    </ClerkProvider>
+  );
+}
+
+// ─── Login Page ───────────────────────────────────────────────────────────────
+function LoginPage() {
+  return (
+    <div style={{
+      minHeight: "100vh",
+      background: "#0f0f0f",
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      fontFamily: "'Georgia', serif",
+    }}>
+      <div style={{ marginBottom: 40, textAlign: "center" }}>
+        <div style={{ fontSize: 13, letterSpacing: "0.3em", color: "#666", textTransform: "uppercase", marginBottom: 12 }}>
+          Application Tracker
+        </div>
+        <div style={{ fontSize: 42, color: "#fff", fontWeight: 400, letterSpacing: "-0.02em" }}>
+          Your job hunt,<br />your business.
+        </div>
+        <div style={{ marginTop: 14, fontSize: 15, color: "#555", maxWidth: 340 }}>
+          Private by default. Share only with who you choose.
+        </div>
+      </div>
+      <SignIn routing="hash" />
+    </div>
+  );
+}
+
+// ─── Main Tracker ─────────────────────────────────────────────────────────────
+function Tracker() {
+  const { user } = useUser();
+  const myEmail = user?.primaryEmailAddress?.emailAddress;
+  const myName = user?.fullName || user?.firstName || myEmail;
+
+  const [view, setView] = useState("mine"); // "mine" | "total" | email string (someone else's tracker)
+  const [myApps, setMyApps] = useState([]);
+  const [sharedWithMe, setSharedWithMe] = useState([]); // list of {owner_email, owner_name}
+  const [myShares, setMyShares] = useState([]); // emails I've shared with
+  const [viewingApps, setViewingApps] = useState([]); // apps for current view
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState("home");
-  const [filter, setFilter] = useState("All");
   const [modal, setModal] = useState(false);
-  const [newTrackerModal, setNewTrackerModal] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [form, setForm] = useState(EMPTY);
+  const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
-  const [saving, setSaving] = useState(false);
+  const [shareModal, setShareModal] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareMsg, setShareMsg] = useState("");
+  const [comments, setComments] = useState({}); // { appId: [comments] }
+  const [commentText, setCommentText] = useState({}); // { appId: text }
+  const [expandedComments, setExpandedComments] = useState({}); // { appId: bool }
+  const [statusFilter, setStatusFilter] = useState("All");
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => { if (myEmail) init(); }, [myEmail]);
+  useEffect(() => { if (view !== "mine") loadViewApps(); }, [view]);
 
-  async function fetchAll() {
+  async function init() {
     setLoading(true);
-    const { data } = await supabase.from("applications").select("*").order("created_at", { ascending: false });
-    setApps(data || []);
+    await Promise.all([fetchMyApps(), fetchSharedWithMe(), fetchMyShares()]);
     setLoading(false);
   }
 
-  const people = [...new Set(apps.map(a => a.person))];
-  const currentApps = view === "total" ? apps : apps.filter(a => a.person === view);
-  const filtered = filter === "All" ? currentApps : currentApps.filter(a => a.status === filter);
+  async function fetchMyApps() {
+    const { data } = await supabase
+      .from("applications")
+      .select("*")
+      .eq("person", myEmail)
+      .order("created_at", { ascending: false });
+    setMyApps(data || []);
+    if (view === "mine") {
+      setViewingApps(data || []);
+      await fetchCommentsForApps(data || []);
+    }
+  }
 
-  const counts = STATUSES.reduce((acc, s) => {
-    acc[s] = currentApps.filter(a => a.status === s).length;
-    return acc;
-  }, {});
+  async function fetchSharedWithMe() {
+    const { data } = await supabase
+      .from("shares")
+      .select("*")
+      .eq("shared_with_email", myEmail);
+    setSharedWithMe(data || []);
+  }
 
-  const chartData = people.map(person => {
-    const personApps = apps.filter(a => a.person === person);
-    const rejected = personApps.filter(a => a.status === "Rejected").length;
-    return {
-      name: person,
-      applications: personApps.length,
-      rejectionPct: personApps.length > 0 ? Math.round((rejected / personApps.length) * 100) : 0,
-    };
-  });
+  async function fetchMyShares() {
+    const { data } = await supabase
+      .from("shares")
+      .select("*")
+      .eq("owner_email", myEmail);
+    setMyShares(data || []);
+  }
 
-  const lastApp = apps[0];
+  async function loadViewApps() {
+    if (view === "total") {
+      // Load apps from everyone who shared with me + mine
+      const ownerEmails = sharedWithMe.map(s => s.owner_email);
+      ownerEmails.push(myEmail);
+      const { data } = await supabase
+        .from("applications")
+        .select("*")
+        .in("person", ownerEmails)
+        .order("created_at", { ascending: false });
+      setViewingApps(data || []);
+      await fetchCommentsForApps(data || []);
+    } else {
+      // Viewing someone else's tracker — check we have access
+      const hasAccess = sharedWithMe.some(s => s.owner_email === view) || view === myEmail;
+      if (!hasAccess) return;
+      const { data } = await supabase
+        .from("applications")
+        .select("*")
+        .eq("person", view)
+        .order("created_at", { ascending: false });
+      setViewingApps(data || []);
+      await fetchCommentsForApps(data || []);
+    }
+  }
 
-  function openAdd() { setForm(EMPTY); setEditId(null); setModal(true); }
-
-  function openEdit(app) {
-    setForm({
-      company: app.company || "",
-      role: app.role || "",
-      status: app.status || "Applied",
-      date: app.date || "",
-      notes: app.notes || "",
-      chance: app.chance || "",
-      type: app.type || "",
-      type_custom: app.type_custom || "",
-      round: app.round || "",
-      alignment: app.alignment || "",
-      impact: app.impact || "",
+  async function fetchCommentsForApps(apps) {
+    if (!apps.length) return;
+    const ids = apps.map(a => a.id);
+    const { data } = await supabase
+      .from("comments")
+      .select("*")
+      .in("application_id", ids)
+      .order("created_at", { ascending: true });
+    const grouped = {};
+    (data || []).forEach(c => {
+      if (!grouped[c.application_id]) grouped[c.application_id] = [];
+      grouped[c.application_id].push(c);
     });
-    setEditId(app.id);
-    setModal(true);
+    setComments(prev => ({ ...prev, ...grouped }));
   }
 
   async function save() {
     if (!form.company || !form.role) return;
-    setSaving(true);
-    const payload = { ...form };
-    if (form.type !== "Other") payload.type_custom = "";
-
-    let error;
     if (editId) {
-      const res = await supabase.from("applications").update(payload).eq("id", editId);
-      error = res.error;
+      await supabase.from("applications").update({ ...form }).eq("id", editId);
     } else {
-      const res = await supabase.from("applications").insert({ ...payload, person: view });
-      error = res.error;
-    }
-
-    setSaving(false);
-    if (error) {
-      alert("Save failed: " + error.message);
-      return;
+      await supabase.from("applications").insert({ ...form, person: myEmail, person_name: myName });
     }
     setModal(false);
+    setForm(EMPTY_FORM);
     setEditId(null);
-    fetchAll();
+    await fetchMyApps();
+    if (view !== "mine") await loadViewApps();
   }
 
   async function remove(id) {
     if (!confirm("Delete this application?")) return;
     await supabase.from("applications").delete().eq("id", id);
-    fetchAll();
+    await fetchMyApps();
+    if (view !== "mine") await loadViewApps();
   }
 
-  function createTracker() {
-    const name = newName.trim();
-    if (!name) return;
-    setNewTrackerModal(false);
-    setNewName("");
-    setView(name);
+  function openEdit(app) {
+    setForm({ company: app.company, role: app.role, status: app.status, date: app.date || "", notes: app.notes || "", alignment: app.alignment || "", impact: app.impact || "" });
+    setEditId(app.id);
+    setModal(true);
   }
 
-  function displayType(app) {
-    if (!app.type) return null;
-    return app.type === "Other" && app.type_custom ? app.type_custom : app.type;
+  async function addShare() {
+    if (!shareEmail.trim()) return;
+    const email = shareEmail.trim().toLowerCase();
+    if (email === myEmail) { setShareMsg("That's your own email!"); return; }
+    if (myShares.some(s => s.shared_with_email === email)) { setShareMsg("Already shared with this person."); return; }
+    await supabase.from("shares").insert({ owner_email: myEmail, shared_with_email: email });
+    await fetchMyShares();
+    setShareEmail("");
+    setShareMsg(`✓ Shared with ${email}`);
+    setTimeout(() => setShareMsg(""), 3000);
   }
 
-  if (view === "home") {
-    return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="mb-6">
-            <h1 className="text-3xl font-semibold text-gray-900">Job Trackers</h1>
-            <p className="text-sm text-gray-500 mt-1">Click a tracker to view or add applications</p>
+  async function removeShare(email) {
+    await supabase.from("shares").delete().eq("owner_email", myEmail).eq("shared_with_email", email);
+    await fetchMyShares();
+  }
+
+  async function postComment(appId) {
+    const text = (commentText[appId] || "").trim();
+    if (!text) return;
+    await supabase.from("comments").insert({
+      application_id: appId,
+      author_email: myEmail,
+      author_name: myName,
+      text,
+    });
+    setCommentText(prev => ({ ...prev, [appId]: "" }));
+    const apps = view === "mine" ? myApps : viewingApps;
+    await fetchCommentsForApps(apps);
+  }
+
+  async function deleteComment(commentId, appId) {
+    // Only app owner can delete
+    await supabase.from("comments").delete().eq("id", commentId);
+    const apps = view === "mine" ? myApps : viewingApps;
+    await fetchCommentsForApps(apps);
+  }
+
+  const isMyTracker = view === "mine" || view === myEmail;
+  const canEdit = isMyTracker;
+
+  // Figure out tracker owner email for permission checks
+  const trackerOwnerEmail = view === "total" ? null : (view === "mine" ? myEmail : view);
+
+  const filtered = statusFilter === "All"
+    ? viewingApps
+    : viewingApps.filter(a => a.status === statusFilter);
+
+  const statusCounts = STATUSES.reduce((acc, s) => {
+    acc[s] = viewingApps.filter(a => a.status === s).length;
+    return acc;
+  }, {});
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: "#fafaf8", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", color: "#999", fontSize: 16 }}>
+      Loading your tracker…
+    </div>
+  );
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#fafaf8", fontFamily: "'Georgia', serif" }}>
+      {/* Top Nav */}
+      <div style={{ background: "#0f0f0f", padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 32 }}>
+          <span style={{ color: "#fff", fontSize: 15, letterSpacing: "0.05em", fontWeight: 400 }}>AppTrackr</span>
+          <div style={{ display: "flex", gap: 4 }}>
+            {[
+              { label: "My Tracker", key: "mine" },
+              { label: "Total View", key: "total" },
+            ].map(tab => (
+              <button key={tab.key} onClick={() => { setView(tab.key); setStatusFilter("All"); if (tab.key === "mine") setViewingApps(myApps); }}
+                style={{ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, background: view === tab.key ? "#fff" : "transparent", color: view === tab.key ? "#0f0f0f" : "#888", transition: "all 0.15s" }}>
+                {tab.label}
+              </button>
+            ))}
+            {sharedWithMe.map(s => (
+              <button key={s.owner_email} onClick={() => { setView(s.owner_email); setStatusFilter("All"); }}
+                style={{ padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer", fontSize: 13, background: view === s.owner_email ? "#fff" : "transparent", color: view === s.owner_email ? "#0f0f0f" : "#888", transition: "all 0.15s" }}>
+                {s.owner_email.split("@")[0]}'s Tracker
+              </button>
+            ))}
           </div>
-
-          {lastApp && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-4 mb-6 flex items-center gap-3">
-              <span className="text-2xl">🔔</span>
-              <p className="text-sm text-indigo-900">
-                <span className="font-semibold">{lastApp.person}</span> just applied to{" "}
-                <span className="font-semibold">{lastApp.company}</span> for{" "}
-                <span className="font-semibold">{lastApp.role}</span>
-              </p>
-            </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          {isMyTracker && (
+            <button onClick={() => setShareModal(true)}
+              style={{ padding: "6px 16px", borderRadius: 6, border: "1px solid #444", background: "transparent", color: "#ccc", fontSize: 13, cursor: "pointer" }}>
+              Share Tracker
+            </button>
           )}
+          <UserButton afterSignOutUrl="/" />
+        </div>
+      </div>
 
-          {chartData.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-2xl p-5 mb-6">
-              <p className="text-sm font-medium text-gray-700 mb-1">Applications per person</p>
-              <p className="text-xs text-gray-400 mb-4">Hover to see rejection rate</p>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={chartData} barSize={40}>
-                  <XAxis dataKey="name" tick={{ fontSize: 13 }} axisLine={false} tickLine={false} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 12 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: "#f3f4f6" }} />
-                  <Bar dataKey="applications" radius={[6, 6, 0, 0]}>
-                    {chartData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="flex gap-4 mt-3 flex-wrap">
-                {chartData.map((d, i) => d.rejectionPct > 0 && (
-                  <span key={i} className="text-xs text-red-500 font-medium">{d.name}: {d.rejectionPct}% rejected</span>
-                ))}
-              </div>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
+        {/* Header */}
+        <div style={{ marginBottom: 28, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: "0.25em", color: "#999", textTransform: "uppercase", marginBottom: 6 }}>
+              {view === "mine" ? `${myName}` : view === "total" ? "Combined View" : `${view.split("@")[0]}'s Tracker`}
             </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-            <div onClick={() => setView("total")} className="bg-gray-900 text-white rounded-2xl p-5 cursor-pointer hover:bg-gray-700 transition-all">
-              <p className="text-xs font-medium opacity-60 mb-1">Combined</p>
-              <p className="text-xl font-semibold">Total Tracker</p>
-              <p className="text-sm opacity-60 mt-2">{apps.length} applications across everyone</p>
-            </div>
-            {people.map(person => {
-              const personApps = apps.filter(a => a.person === person);
-              return (
-                <div key={person} onClick={() => setView(person)} className="bg-white border border-gray-200 rounded-2xl p-5 cursor-pointer hover:border-gray-400 hover:shadow-sm transition-all">
-                  <p className="text-xs text-gray-400 mb-1">Personal tracker</p>
-                  <p className="text-xl font-semibold text-gray-900">{person}'s Tracker</p>
-                  <div className="flex gap-3 mt-3 flex-wrap">
-                    {STATUSES.filter(s => personApps.some(a => a.status === s)).map(s => (
-                      <span key={s} className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[s]}`}>
-                        {personApps.filter(a => a.status === s).length} {s}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-            <div onClick={() => setNewTrackerModal(true)} className="border-2 border-dashed border-gray-200 rounded-2xl p-5 cursor-pointer hover:border-gray-400 transition-all flex flex-col items-center justify-center text-gray-400 hover:text-gray-600 min-h-[120px]">
-              <p className="text-2xl mb-1">+</p>
-              <p className="text-sm font-medium">New tracker</p>
+            <div style={{ fontSize: 30, color: "#1a1a1a", fontWeight: 400 }}>
+              {viewingApps.length} Application{viewingApps.length !== 1 ? "s" : ""}
             </div>
           </div>
-
-          {apps.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-700">Activity Log</p>
-                <p className="text-xs text-gray-400 mt-0.5">Every application in order of when it was added</p>
-              </div>
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-100">
-                  <tr>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Person</th>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Applied to</th>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Role</th>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Status</th>
-                    <th className="text-left px-5 py-3 text-xs font-medium text-gray-500">Added at</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {apps.map((app, i) => (
-                    <tr key={app.id} className={`border-t border-gray-100 hover:bg-gray-50 ${i === 0 ? "border-t-0" : ""}`}>
-                      <td className="px-5 py-3 font-medium text-gray-900">{app.person}</td>
-                      <td className="px-5 py-3 text-gray-700">{app.company}</td>
-                      <td className="px-5 py-3 text-gray-500">{app.role}</td>
-                      <td className="px-5 py-3">
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${STATUS_STYLES[app.status]}`}>{app.status}</span>
-                      </td>
-                      <td className="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">{fmtDateTime(app.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          {canEdit && (
+            <button onClick={() => { setForm(EMPTY_FORM); setEditId(null); setModal(true); }}
+              style={{ padding: "10px 22px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer", letterSpacing: "0.02em" }}>
+              + Add Application
+            </button>
           )}
         </div>
 
-        {newTrackerModal && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-sm">
-              <h2 className="text-base font-semibold mb-4">Create your tracker</h2>
-              <input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" placeholder="Your name (e.g. Ahmad)" value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => e.key === "Enter" && createTracker()} autoFocus />
-              <div className="flex justify-end gap-2 mt-4">
-                <button onClick={() => setNewTrackerModal(false)} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
-                <button onClick={createTracker} className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-700">Create</button>
-              </div>
-            </div>
+        {/* Status summary pills */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
+          <button onClick={() => setStatusFilter("All")}
+            style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${statusFilter === "All" ? "#0f0f0f" : "#ddd"}`, background: statusFilter === "All" ? "#0f0f0f" : "#fff", color: statusFilter === "All" ? "#fff" : "#666", fontSize: 12, cursor: "pointer" }}>
+            All ({viewingApps.length})
+          </button>
+          {STATUSES.filter(s => statusCounts[s] > 0).map(s => {
+            const c = STATUS_COLORS[s];
+            const active = statusFilter === s;
+            return (
+              <button key={s} onClick={() => setStatusFilter(statusFilter === s ? "All" : s)}
+                style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${active ? c.border : "#ddd"}`, background: active ? c.bg : "#fff", color: active ? c.text : "#666", fontSize: 12, cursor: "pointer" }}>
+                {s} ({statusCounts[s]})
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Table */}
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "80px 0", color: "#aaa", fontSize: 15 }}>
+            {canEdit ? "No applications yet. Add your first one →" : "Nothing here yet."}
+          </div>
+        ) : (
+          <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e8e4", overflow: "hidden" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid #f0f0ec" }}>
+                  {view === "total" && <th style={thStyle}>Person</th>}
+                  <th style={thStyle}>Company</th>
+                  <th style={thStyle}>Role</th>
+                  <th style={thStyle}>Status</th>
+                  <th style={thStyle}>Fit</th>
+                  <th style={thStyle}>Priority</th>
+                  <th style={thStyle}>Date</th>
+                  <th style={thStyle}>Notes</th>
+                  <th style={{ ...thStyle, textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((app, i) => {
+                  const sc = STATUS_COLORS[app.status] || {};
+                  const appComments = comments[app.id] || [];
+                  const expanded = expandedComments[app.id];
+                  const isOwner = app.person === myEmail;
+                  // Can comment if: this is my tracker, total view, or viewing someone's shared tracker
+                  const canComment = true;
+
+                  return (
+                    <>
+                      <tr key={app.id} style={{ borderBottom: expanded ? "none" : "1px solid #f5f5f2", background: i % 2 === 0 ? "#fff" : "#fdfdfc" }}>
+                        {view === "total" && (
+                          <td style={tdStyle}>
+                            <span style={{ fontSize: 12, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>
+                              {(app.person_name || app.person.split("@")[0])}
+                            </span>
+                          </td>
+                        )}
+                        <td style={{ ...tdStyle, fontWeight: 500, color: "#1a1a1a" }}>{app.company}</td>
+                        <td style={{ ...tdStyle, color: "#555" }}>{app.role}</td>
+                        <td style={tdStyle}>
+                          <span style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 12, background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, whiteSpace: "nowrap" }}>
+                            {app.status}
+                          </span>
+                        </td>
+                        <td style={tdStyle}>
+                          {app.alignment ? <span style={{ fontSize: 11, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>{app.alignment}</span> : <span style={{ color: "#ddd" }}>—</span>}
+                        </td>
+                        <td style={tdStyle}>
+                          {app.impact ? <span style={{ fontSize: 11, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>{app.impact}</span> : <span style={{ color: "#ddd" }}>—</span>}
+                        </td>
+                        <td style={{ ...tdStyle, color: "#aaa", fontSize: 12, whiteSpace: "nowrap" }}>{fmt(app.date)}</td>
+                        <td style={{ ...tdStyle, color: "#888", fontSize: 12, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={app.notes}>{app.notes || "—"}</td>
+                        <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                          <button onClick={() => setExpandedComments(prev => ({ ...prev, [app.id]: !prev[app.id] }))}
+                            style={{ fontSize: 11, color: appComments.length ? "#6366f1" : "#bbb", background: "none", border: "none", cursor: "pointer", marginRight: 8 }}>
+                            💬 {appComments.length}
+                          </button>
+                          {isOwner && (
+                            <>
+                              <button onClick={() => openEdit(app)} style={{ fontSize: 12, color: "#888", background: "none", border: "none", cursor: "pointer", marginRight: 6 }}>Edit</button>
+                              <button onClick={() => remove(app.id)} style={{ fontSize: 12, color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>Delete</button>
+                            </>
+                          )}
+                        </td>
+                      </tr>
+                      {expanded && (
+                        <tr key={`${app.id}-comments`} style={{ borderBottom: "1px solid #f5f5f2" }}>
+                          <td colSpan={view === "total" ? 9 : 8} style={{ padding: "12px 20px 16px", background: "#fafaf8" }}>
+                            <div style={{ fontSize: 12, color: "#999", marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase" }}>Comments</div>
+                            {appComments.length === 0 && <div style={{ fontSize: 13, color: "#ccc", marginBottom: 10 }}>No comments yet.</div>}
+                            {appComments.map(c => (
+                              <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, background: "#fff", borderRadius: 8, padding: "8px 12px", border: "1px solid #efefec" }}>
+                                <div>
+                                  <span style={{ fontSize: 12, fontWeight: 600, color: "#555", marginRight: 8 }}>{c.author_name || c.author_email.split("@")[0]}</span>
+                                  <span style={{ fontSize: 13, color: "#333" }}>{c.text}</span>
+                                  <div style={{ fontSize: 11, color: "#ccc", marginTop: 2 }}>{fmt(c.created_at)}</div>
+                                </div>
+                                {isOwner && (
+                                  <button onClick={() => deleteComment(c.id, app.id)} style={{ fontSize: 11, color: "#ef4444", background: "none", border: "none", cursor: "pointer", marginLeft: 12, flexShrink: 0 }}>✕</button>
+                                )}
+                              </div>
+                            ))}
+                            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                              <input
+                                value={commentText[app.id] || ""}
+                                onChange={e => setCommentText(prev => ({ ...prev, [app.id]: e.target.value }))}
+                                onKeyDown={e => e.key === "Enter" && postComment(app.id)}
+                                placeholder="Add a comment…"
+                                style={{ flex: 1, border: "1px solid #e0e0dc", borderRadius: 6, padding: "7px 12px", fontSize: 13, outline: "none", fontFamily: "Georgia, serif", background: "#fff" }}
+                              />
+                              <button onClick={() => postComment(app.id)}
+                                style={{ padding: "7px 16px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>
+                                Post
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
-    );
-  }
 
-  return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <button onClick={() => { setView("home"); setFilter("All"); }} className="text-sm text-gray-400 hover:text-gray-700">← Home</button>
-          <span className="text-gray-300">/</span>
-          <h1 className="text-2xl font-semibold text-gray-900">{view === "total" ? "Total Tracker" : `${view}'s Tracker`}</h1>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
-          {STATUSES.map(s => (
-            <div key={s} className="bg-white rounded-xl border border-gray-200 p-3">
-              <p className="text-xs text-gray-500">{s}</p>
-              <p className="text-2xl font-semibold text-gray-900 mt-1">{counts[s]}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div className="flex gap-2 flex-wrap">
-            {["All", ...STATUSES].map(f => (
-              <button key={f} onClick={() => setFilter(f)} className={`text-sm px-3 py-1.5 rounded-full border transition-all ${filter === f ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"}`}>{f}</button>
-            ))}
-          </div>
-          {view !== "total" && (
-            <button onClick={openAdd} className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-all">+ Add application</button>
-          )}
-        </div>
-        <div className="bg-white border border-gray-200 rounded-xl overflow-x-auto">
-          <table className="text-sm" style={{width:"100%", tableLayout:"fixed"}}>
-            <colgroup>
-              {view === "total" && <col style={{width:"90px"}}/>}
-              <col style={{width:"130px"}}/>
-              <col style={{width:"160px"}}/>
-              <col style={{width:"100px"}}/>
-              <col style={{width:"90px"}}/>
-              <col style={{width:"130px"}}/>
-              <col style={{width:"110px"}}/>
-              <col style={{width:"120px"}}/>
-              <col style={{width:"90px"}}/>
-              <col style={{width:"95px"}}/>
-              <col style={{width:"130px"}}/>
-              <col style={{width:"80px"}}/>
-            </colgroup>
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {view === "total" && <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Person</th>}
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Company</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Role</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Type</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Status</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Round</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Chance</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Values</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Impact</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Date</th>
-                <th className="text-left px-3 py-2 text-xs font-medium text-gray-500">Notes</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading && <tr><td colSpan={12} className="text-center py-12 text-gray-400">Loading...</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td colSpan={12} className="text-center py-12 text-gray-400">No applications yet</td></tr>}
-              {filtered.map((app, i) => {
-                const isRejected = app.status === "Rejected";
-                return (
-                  <tr key={app.id} className={`border-t border-gray-100 ${i === 0 ? "border-t-0" : ""} ${isRejected ? "bg-red-50 hover:bg-red-100" : "hover:bg-gray-50"}`}>
-                    {view === "total" && <td className="px-3 py-2 font-medium text-gray-700 truncate">{app.person}</td>}
-                    <td className={`px-3 py-2 font-medium truncate ${isRejected ? "text-red-800 line-through" : "text-gray-900"}`} title={app.company}>{app.company}</td>
-                    <td className={`px-3 py-2 truncate ${isRejected ? "text-red-600 line-through" : "text-gray-600"}`} title={app.role}>{app.role}</td>
-                    <td className="px-3 py-2">
-                      {displayType(app) ? <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 truncate block w-fit max-w-full">{displayType(app)}</span> : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2"><span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${STATUS_STYLES[app.status]}`}>{app.status}</span></td>
-                    <td className="px-3 py-2">
-                      {app.round ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${ROUND_STYLES[app.round] || "bg-gray-100 text-gray-600"}`}>{app.round}</span> : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2">
-                      {app.chance ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${CHANCE_STYLES[app.chance] || "bg-gray-100 text-gray-600"}`}>{app.chance}</span> : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2">
-                      {app.alignment ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${ALIGNMENT_STYLES[app.alignment] || "bg-gray-100 text-gray-600"}`}>{app.alignment}</span> : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2">
-                      {app.impact ? <span className={`text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${IMPACT_STYLES[app.impact] || "bg-gray-100 text-gray-600"}`}>{app.impact}</span> : <span className="text-gray-300">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500 whitespace-nowrap text-xs">{fmt(app.date)}</td>
-                    <td className="px-3 py-2 text-gray-500 truncate text-xs" title={app.notes}>{app.notes || "—"}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex gap-1 justify-end">
-                        {view !== "total" && <button onClick={() => openEdit(app)} className="text-xs text-gray-400 hover:text-gray-700 whitespace-nowrap">Edit</button>}
-                        <button onClick={() => remove(app.id)} className="text-xs text-red-400 hover:text-red-600 whitespace-nowrap">Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Add/Edit Modal */}
       {modal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl border border-gray-200 p-6 w-full max-w-md shadow-xl my-8">
-            <h2 className="text-base font-semibold mb-4">{editId ? "Edit application" : "Add application"}</h2>
-            <div className="space-y-3">
-              <div><label className="block text-xs text-gray-500 mb-1">Company *</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="e.g. Google" /></div>
-              <div><label className="block text-xs text-gray-500 mb-1">Role *</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} placeholder="e.g. Software Engineer" /></div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Type</label>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {TYPES.map(t => <option key={t}>{t}</option>)}
-                </select>
-              </div>
-              {form.type === "Other" && (
-                <div><label className="block text-xs text-gray-500 mb-1">Custom type</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.type_custom} onChange={e => setForm({ ...form, type_custom: e.target.value })} placeholder="e.g. Spring Week" /></div>
-              )}
-              <div><label className="block text-xs text-gray-500 mb-1">Status</label><select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Round</label>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.round} onChange={e => setForm({ ...form, round: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {ROUNDS.map(r => <option key={r}>{r}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Chance</label>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.chance} onChange={e => setForm({ ...form, chance: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {CHANCES.map(c => <option key={c}>{c}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Values Alignment</label>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.alignment} onChange={e => setForm({ ...form, alignment: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {ALIGNMENTS.map(a => <option key={a}>{a}</option>)}
-                </select>
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 440, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+            <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 20, fontWeight: 400 }}>{editId ? "Edit Application" : "New Application"}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {[
+                { label: "Company *", key: "company", placeholder: "e.g. Google" },
+                { label: "Role *", key: "role", placeholder: "e.g. Software Engineer" },
+              ].map(f => (
+                <div key={f.key}>
+                  <label style={labelStyle}>{f.label}</label>
+                  <input value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })}
+                    placeholder={f.placeholder} style={inputStyle} />
+                </div>
+              ))}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Status</label>
+                  <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={inputStyle}>
+                    {STATUSES.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Fit</label>
+                  <select value={form.alignment} onChange={e => setForm({ ...form, alignment: e.target.value })} style={inputStyle}>
+                    {ALIGNMENT.map(s => <option key={s} value={s}>{s || "—"}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Priority</label>
+                  <select value={form.impact} onChange={e => setForm({ ...form, impact: e.target.value })} style={inputStyle}>
+                    {IMPACT.map(s => <option key={s} value={s}>{s || "—"}</option>)}
+                  </select>
+                </div>
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Potential for Impact</label>
-                <select className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.impact} onChange={e => setForm({ ...form, impact: e.target.value })}>
-                  <option value="">— Select —</option>
-                  {IMPACTS.map(i => <option key={i}>{i}</option>)}
-                </select>
+                <label style={labelStyle}>Date Applied</label>
+                <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} />
               </div>
-              <div><label className="block text-xs text-gray-500 mb-1">Date applied</label><input type="date" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} /></div>
-              <div><label className="block text-xs text-gray-500 mb-1">Notes</label><input className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-gray-400" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Optional" /></div>
+              <div>
+                <label style={labelStyle}>Notes</label>
+                <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Optional" style={inputStyle} />
+              </div>
             </div>
-            <div className="flex justify-end gap-2 mt-5">
-              <button onClick={() => { setModal(false); setEditId(null); }} className="text-sm px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
-              <button onClick={save} disabled={saving} className="text-sm px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-700 disabled:opacity-50">
-                {saving ? "Saving..." : "Save"}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+              <button onClick={() => { setModal(false); setEditId(null); }}
+                style={{ padding: "9px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#666", fontSize: 13, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={save}
+                style={{ padding: "9px 18px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
+                {editId ? "Save Changes" : "Add Application"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {shareModal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+            <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 6, fontWeight: 400 }}>Share Your Tracker</div>
+            <div style={{ fontSize: 13, color: "#999", marginBottom: 20 }}>People you invite can view your applications and leave comments.</div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <input value={shareEmail} onChange={e => setShareEmail(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && addShare()}
+                placeholder="Enter their email address"
+                style={{ ...inputStyle, flex: 1, margin: 0 }} />
+              <button onClick={addShare}
+                style={{ padding: "9px 18px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                Invite
+              </button>
+            </div>
+            {shareMsg && <div style={{ fontSize: 13, color: shareMsg.startsWith("✓") ? "#166534" : "#991b1b", marginBottom: 12 }}>{shareMsg}</div>}
+
+            {myShares.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8 }}>Shared with</div>
+                {myShares.map(s => (
+                  <div key={s.shared_with_email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#fafaf8", borderRadius: 8, marginBottom: 6, border: "1px solid #efefec" }}>
+                    <span style={{ fontSize: 13, color: "#555" }}>{s.shared_with_email}</span>
+                    <button onClick={() => removeShare(s.shared_with_email)}
+                      style={{ fontSize: 12, color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ marginTop: 20, textAlign: "right" }}>
+              <button onClick={() => { setShareModal(false); setShareEmail(""); setShareMsg(""); }}
+                style={{ padding: "9px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#666", fontSize: 13, cursor: "pointer" }}>
+                Done
               </button>
             </div>
           </div>
@@ -464,3 +552,41 @@ export default function App() {
     </div>
   );
 }
+
+const thStyle = {
+  padding: "11px 16px",
+  textAlign: "left",
+  fontSize: 11,
+  fontWeight: 500,
+  color: "#aaa",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  fontFamily: "Georgia, serif",
+};
+
+const tdStyle = {
+  padding: "12px 16px",
+  fontSize: 13,
+  fontFamily: "Georgia, serif",
+  verticalAlign: "top",
+};
+
+const labelStyle = {
+  display: "block",
+  fontSize: 11,
+  color: "#999",
+  marginBottom: 5,
+  letterSpacing: "0.05em",
+};
+
+const inputStyle = {
+  width: "100%",
+  border: "1px solid #e0e0dc",
+  borderRadius: 8,
+  padding: "8px 12px",
+  fontSize: 13,
+  outline: "none",
+  fontFamily: "Georgia, serif",
+  background: "#fff",
+  boxSizing: "border-box",
+};
