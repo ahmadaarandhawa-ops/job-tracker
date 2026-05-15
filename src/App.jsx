@@ -93,6 +93,7 @@ function Tracker() {
   useEffect(() => {
     if (view !== "mine" && view !== "home") loadViewApps();
     else if (view === "mine") { setViewingApps(myApps); fetchCommentsForApps(myApps); }
+    else if (view === "home") fetchAllConnectedApps(sharedWithMe);
   }, [view]);
 
   useEffect(() => {
