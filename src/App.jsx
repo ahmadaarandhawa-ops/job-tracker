@@ -1,13 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
-  ClerkProvider,
-  SignedIn,
-  SignedOut,
-  SignIn,
-  useUser,
-  UserButton,
+  ClerkProvider, SignedIn, SignedOut, SignIn, useUser, UserButton,
 } from "@clerk/clerk-react";
 import { createClient } from "@supabase/supabase-js";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 
 const PUBLISHABLE_KEY = "pk_test_bWFpbi1jb3JhbC00OS5jbGVyay5hY2NvdW50cy5kZXYk";
 const SUPABASE_URL = "https://pvjmzycmvavmntbmudbc.supabase.co";
@@ -17,12 +13,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const STATUSES = ["Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
 const ALIGNMENT = ["", "Reaches", "Good Fit", "Dream", "Safety"];
 const IMPACT = ["", "Low", "Medium", "High"];
+const BAR_COLORS = ["#0f0f0f", "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6"];
 
 const STATUS_COLORS = {
-  Applied: { bg: "#e8f4fd", text: "#1a6fa8", border: "#b8d9f0" },
+  Applied:   { bg: "#e8f4fd", text: "#1a6fa8", border: "#b8d9f0" },
   Interview: { bg: "#fef3e2", text: "#b45309", border: "#fcd88a" },
-  Offer: { bg: "#e6f9f0", text: "#166534", border: "#86efac" },
-  Rejected: { bg: "#fde8e8", text: "#991b1b", border: "#fca5a5" },
+  Offer:     { bg: "#e6f9f0", text: "#166534", border: "#86efac" },
+  Rejected:  { bg: "#fde8e8", text: "#991b1b", border: "#fca5a5" },
   Withdrawn: { bg: "#f3f4f6", text: "#4b5563", border: "#d1d5db" },
 };
 
@@ -30,134 +27,131 @@ const EMPTY_FORM = { company: "", role: "", status: "Applied", date: "", notes: 
 
 function fmt(d) {
   if (!d) return "—";
-  const date = new Date(d);
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-// ─── Main App Shell ───────────────────────────────────────────────────────────
+function timeAgo(d) {
+  if (!d) return "";
+  const diff = (Date.now() - new Date(d)) / 1000;
+  if (diff < 60) return "just now";
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+}
+
 export default function App() {
   return (
     <ClerkProvider publishableKey={PUBLISHABLE_KEY}>
-      <SignedOut>
-        <LoginPage />
-      </SignedOut>
-      <SignedIn>
-        <Tracker />
-      </SignedIn>
+      <SignedOut><LoginPage /></SignedOut>
+      <SignedIn><Tracker /></SignedIn>
     </ClerkProvider>
   );
 }
 
-// ─── Login Page ───────────────────────────────────────────────────────────────
 function LoginPage() {
   return (
-    <div style={{
-      minHeight: "100vh",
-      background: "#0f0f0f",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      fontFamily: "'Georgia', serif",
-    }}>
+    <div style={{ minHeight: "100vh", background: "#0f0f0f", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'Georgia', serif" }}>
       <div style={{ marginBottom: 40, textAlign: "center" }}>
-        <div style={{ fontSize: 13, letterSpacing: "0.3em", color: "#666", textTransform: "uppercase", marginBottom: 12 }}>
-          Application Tracker
-        </div>
-        <div style={{ fontSize: 42, color: "#fff", fontWeight: 400, letterSpacing: "-0.02em" }}>
-          Your job hunt,<br />your business.
-        </div>
-        <div style={{ marginTop: 14, fontSize: 15, color: "#555", maxWidth: 340 }}>
-          Private by default. Share only with who you choose.
-        </div>
+        <div style={{ fontSize: 13, letterSpacing: "0.3em", color: "#666", textTransform: "uppercase", marginBottom: 12 }}>Application Tracker</div>
+        <div style={{ fontSize: 42, color: "#fff", fontWeight: 400, letterSpacing: "-0.02em" }}>Your job hunt,<br />your business.</div>
+        <div style={{ marginTop: 14, fontSize: 15, color: "#555", maxWidth: 340 }}>Private by default. Share only with who you choose.</div>
       </div>
       <SignIn routing="hash" />
     </div>
   );
 }
 
-// ─── Main Tracker ─────────────────────────────────────────────────────────────
 function Tracker() {
   const { user } = useUser();
   const myEmail = user?.primaryEmailAddress?.emailAddress;
   const myName = user?.fullName || user?.firstName || myEmail;
 
-  const [view, setView] = useState("home"); // "home" | "mine" | "total" | email string (someone else's tracker)
+  const [view, setView] = useState("home");
   const [myApps, setMyApps] = useState([]);
-  const [sharedWithMe, setSharedWithMe] = useState([]); // list of {owner_email, owner_name}
-  const [myShares, setMyShares] = useState([]); // emails I've shared with
-  const [viewingApps, setViewingApps] = useState([]); // apps for current view
+  const [sharedWithMe, setSharedWithMe] = useState([]);
+  const [myShares, setMyShares] = useState([]);
+  const [viewingApps, setViewingApps] = useState([]);
+  const [allConnectedApps, setAllConnectedApps] = useState([]);
+  const [activity, setActivity] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifs, setShowNotifs] = useState(false);
   const [loading, setLoading] = useState(true);
   const [modal, setModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [editId, setEditId] = useState(null);
+  const [prevStatus, setPrevStatus] = useState(null);
   const [shareModal, setShareModal] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [shareMsg, setShareMsg] = useState("");
-  const [comments, setComments] = useState({}); // { appId: [comments] }
-  const [commentText, setCommentText] = useState({}); // { appId: text }
-  const [expandedComments, setExpandedComments] = useState({}); // { appId: bool }
+  const [comments, setComments] = useState({});
+  const [commentText, setCommentText] = useState({});
+  const [expandedComments, setExpandedComments] = useState({});
   const [statusFilter, setStatusFilter] = useState("All");
+  const notifRef = useRef(null);
 
   useEffect(() => { if (myEmail) init(); }, [myEmail]);
-  useEffect(() => { if (view !== "mine" && view !== "home") loadViewApps(); else if (view === "mine") { setViewingApps(myApps); fetchCommentsForApps(myApps); } }, [view]);
+  useEffect(() => {
+    if (view !== "mine" && view !== "home") loadViewApps();
+    else if (view === "mine") { setViewingApps(myApps); fetchCommentsForApps(myApps); }
+  }, [view]);
+
+  useEffect(() => {
+    function handle(e) { if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifs(false); }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
 
   async function init() {
     setLoading(true);
-    await Promise.all([fetchMyApps(), fetchSharedWithMe(), fetchMyShares()]);
+    const [, shared] = await Promise.all([fetchMyApps(), fetchSharedWithMe(), fetchMyShares(), fetchNotifications()]);
+    await fetchAllConnectedApps(shared);
     setLoading(false);
   }
 
   async function fetchMyApps() {
-    const { data } = await supabase
-      .from("applications")
-      .select("*")
-      .eq("person", myEmail)
-      .order("created_at", { ascending: false });
+    const { data } = await supabase.from("applications").select("*").eq("person", myEmail).order("created_at", { ascending: false });
     setMyApps(data || []);
-    if (view === "mine") {
-      setViewingApps(data || []);
-      await fetchCommentsForApps(data || []);
-    }
+    if (view === "mine") { setViewingApps(data || []); await fetchCommentsForApps(data || []); }
+    return data || [];
   }
 
   async function fetchSharedWithMe() {
-    const { data } = await supabase
-      .from("shares")
-      .select("*")
-      .eq("shared_with_email", myEmail);
+    const { data } = await supabase.from("shares").select("*").eq("shared_with_email", myEmail);
     setSharedWithMe(data || []);
+    return data || [];
   }
 
   async function fetchMyShares() {
-    const { data } = await supabase
-      .from("shares")
-      .select("*")
-      .eq("owner_email", myEmail);
+    const { data } = await supabase.from("shares").select("*").eq("owner_email", myEmail);
     setMyShares(data || []);
+    return data || [];
+  }
+
+  async function fetchNotifications() {
+    const { data } = await supabase.from("notifications").select("*").eq("user_email", myEmail).order("created_at", { ascending: false }).limit(20);
+    setNotifications(data || []);
+  }
+
+  async function fetchAllConnectedApps(sharedList) {
+    const ownerEmails = (sharedList || sharedWithMe).map(s => s.owner_email);
+    ownerEmails.push(myEmail);
+    const { data } = await supabase.from("applications").select("*").in("person", ownerEmails).order("created_at", { ascending: false });
+    setAllConnectedApps(data || []);
+    const sorted = [...(data || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 20);
+    setActivity(sorted);
   }
 
   async function loadViewApps() {
     if (view === "total") {
-      // Load apps from everyone who shared with me + mine
       const ownerEmails = sharedWithMe.map(s => s.owner_email);
       ownerEmails.push(myEmail);
-      const { data } = await supabase
-        .from("applications")
-        .select("*")
-        .in("person", ownerEmails)
-        .order("created_at", { ascending: false });
+      const { data } = await supabase.from("applications").select("*").in("person", ownerEmails).order("created_at", { ascending: false });
       setViewingApps(data || []);
       await fetchCommentsForApps(data || []);
     } else {
-      // Viewing someone else's tracker — check we have access
       const hasAccess = sharedWithMe.some(s => s.owner_email === view) || view === myEmail;
       if (!hasAccess) return;
-      const { data } = await supabase
-        .from("applications")
-        .select("*")
-        .eq("person", view)
-        .order("created_at", { ascending: false });
+      const { data } = await supabase.from("applications").select("*").eq("person", view).order("created_at", { ascending: false });
       setViewingApps(data || []);
       await fetchCommentsForApps(data || []);
     }
@@ -166,11 +160,7 @@ function Tracker() {
   async function fetchCommentsForApps(apps) {
     if (!apps.length) return;
     const ids = apps.map(a => a.id);
-    const { data } = await supabase
-      .from("comments")
-      .select("*")
-      .in("application_id", ids)
-      .order("created_at", { ascending: true });
+    const { data } = await supabase.from("comments").select("*").in("application_id", ids).order("created_at", { ascending: true });
     const grouped = {};
     (data || []).forEach(c => {
       if (!grouped[c.application_id]) grouped[c.application_id] = [];
@@ -182,15 +172,24 @@ function Tracker() {
   async function save() {
     if (!form.company || !form.role) return;
     if (editId) {
+      if (prevStatus && prevStatus !== form.status) {
+        const app = myApps.find(a => a.id === editId);
+        const notifTargets = myShares.map(s => s.shared_with_email);
+        for (const email of notifTargets) {
+          await supabase.from("notifications").insert({
+            user_email: email, type: "status_change",
+            message: `${myName} updated ${app?.company || form.company} to ${form.status}`,
+          });
+        }
+      }
       await supabase.from("applications").update({ ...form }).eq("id", editId);
     } else {
       await supabase.from("applications").insert({ ...form, person: myEmail, person_name: myName });
     }
-    setModal(false);
-    setForm(EMPTY_FORM);
-    setEditId(null);
+    setModal(false); setForm(EMPTY_FORM); setEditId(null); setPrevStatus(null);
     await fetchMyApps();
     if (view !== "mine") await loadViewApps();
+    await fetchAllConnectedApps(sharedWithMe);
   }
 
   async function remove(id) {
@@ -198,12 +197,12 @@ function Tracker() {
     await supabase.from("applications").delete().eq("id", id);
     await fetchMyApps();
     if (view !== "mine") await loadViewApps();
+    await fetchAllConnectedApps(sharedWithMe);
   }
 
   function openEdit(app) {
     setForm({ company: app.company, role: app.role, status: app.status, date: app.date || "", notes: app.notes || "", alignment: app.alignment || "", impact: app.impact || "" });
-    setEditId(app.id);
-    setModal(true);
+    setEditId(app.id); setPrevStatus(app.status); setModal(true);
   }
 
   async function addShare() {
@@ -211,44 +210,62 @@ function Tracker() {
     const email = shareEmail.trim().toLowerCase();
     if (email === myEmail) { setShareMsg("That's your own email!"); return; }
     if (myShares.some(s => s.shared_with_email === email)) { setShareMsg("Already shared with this person."); return; }
-    await supabase.from("shares").insert({ owner_email: myEmail, shared_with_email: email });
-    await fetchMyShares();
+    const { error } = await supabase.from("shares").insert([
+      { owner_email: myEmail, shared_with_email: email },
+      { owner_email: email, shared_with_email: myEmail },
+    ]);
+    if (error) { setShareMsg(`Error: ${error.message}`); return; }
+    await supabase.from("notifications").insert({ user_email: email, type: "share", message: `${myName} shared their tracker with you` });
+    await Promise.all([fetchMyShares(), fetchSharedWithMe()]);
     setShareEmail("");
-    setShareMsg(`✓ Shared with ${email}`);
-    setTimeout(() => setShareMsg(""), 3000);
+    setShareMsg("✓ Connected! You can now both see each other's trackers.");
+    setTimeout(() => setShareMsg(""), 4000);
   }
 
   async function removeShare(email) {
     await supabase.from("shares").delete().eq("owner_email", myEmail).eq("shared_with_email", email);
-    await fetchMyShares();
+    await supabase.from("shares").delete().eq("owner_email", email).eq("shared_with_email", myEmail);
+    await Promise.all([fetchMyShares(), fetchSharedWithMe()]);
   }
 
   async function postComment(appId) {
     const text = (commentText[appId] || "").trim();
     if (!text) return;
-    await supabase.from("comments").insert({
-      application_id: appId,
-      author_email: myEmail,
-      author_name: myName,
-      text,
-    });
+    await supabase.from("comments").insert({ application_id: appId, author_email: myEmail, author_name: myName, text });
+    const app = [...myApps, ...viewingApps].find(a => a.id === appId);
+    if (app && app.person !== myEmail) {
+      await supabase.from("notifications").insert({
+        user_email: app.person, type: "comment",
+        message: `${myName} commented on your ${app.company} application: "${text.slice(0, 50)}${text.length > 50 ? "…" : ""}"`,
+      });
+    }
     setCommentText(prev => ({ ...prev, [appId]: "" }));
-    const apps = view === "mine" ? myApps : viewingApps;
-    await fetchCommentsForApps(apps);
+    await fetchCommentsForApps(view === "mine" ? myApps : viewingApps);
   }
 
-  async function deleteComment(commentId, appId) {
-    // Only app owner can delete
+  async function deleteComment(commentId) {
     await supabase.from("comments").delete().eq("id", commentId);
-    const apps = view === "mine" ? myApps : viewingApps;
-    await fetchCommentsForApps(apps);
+    await fetchCommentsForApps(view === "mine" ? myApps : viewingApps);
   }
 
+  async function markAllRead() {
+    await supabase.from("notifications").update({ read: true }).eq("user_email", myEmail);
+    await fetchNotifications();
+  }
+
+  const unreadCount = notifications.filter(n => !n.read).length;
   const isMyTracker = view === "mine" || view === myEmail;
-  const canEdit = isMyTracker;
-  const trackerOwnerEmail = view === "total" ? null : (view === "mine" ? myEmail : view);
   const filtered = statusFilter === "All" ? viewingApps : viewingApps.filter(a => a.status === statusFilter);
   const statusCounts = STATUSES.reduce((acc, s) => { acc[s] = viewingApps.filter(a => a.status === s).length; return acc; }, {});
+
+  const barData = (() => {
+    const counts = {};
+    allConnectedApps.forEach(a => {
+      const name = a.person_name || a.person.split("@")[0];
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+  })();
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#fafaf8", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", color: "#999", fontSize: 16 }}>
@@ -256,150 +273,206 @@ function Tracker() {
     </div>
   );
 
-  // ── Home Page ──
+  const NotifBell = () => (
+    <div ref={notifRef} style={{ position: "relative" }}>
+      <button onClick={() => { setShowNotifs(!showNotifs); if (!showNotifs && unreadCount > 0) markAllRead(); }}
+        style={{ position: "relative", background: "none", border: "none", cursor: "pointer", padding: "4px 8px", color: "#888", fontSize: 18, lineHeight: 1 }}>
+        🔔
+        {unreadCount > 0 && (
+          <span style={{ position: "absolute", top: 0, right: 0, background: "#ef4444", color: "#fff", fontSize: 10, borderRadius: "50%", width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", fontWeight: 600 }}>
+            {unreadCount > 9 ? "9+" : unreadCount}
+          </span>
+        )}
+      </button>
+      {showNotifs && (
+        <div style={{ position: "absolute", right: 0, top: 40, width: 320, background: "#fff", borderRadius: 12, boxShadow: "0 8px 32px rgba(0,0,0,0.15)", border: "1px solid #e8e8e4", zIndex: 200, overflow: "hidden" }}>
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid #f0f0ec", fontSize: 11, color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase" }}>Notifications</div>
+          {notifications.length === 0 ? (
+            <div style={{ padding: "20px 16px", fontSize: 13, color: "#ccc", textAlign: "center" }}>Nothing yet</div>
+          ) : (
+            <div style={{ maxHeight: 320, overflowY: "auto" }}>
+              {notifications.map(n => (
+                <div key={n.id} style={{ padding: "10px 16px", borderBottom: "1px solid #f5f5f2", background: n.read ? "#fff" : "#fdf8ff" }}>
+                  <div style={{ fontSize: 13, color: "#333", lineHeight: 1.4 }}>{n.message}</div>
+                  <div style={{ fontSize: 11, color: "#bbb", marginTop: 3 }}>{timeAgo(n.created_at)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const ShareModal = () => shareModal ? (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
+        <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 6, fontWeight: 400 }}>Share Your Tracker</div>
+        <div style={{ fontSize: 13, color: "#999", marginBottom: 20 }}>Sharing is mutual — you'll both see each other's trackers.</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+          <input value={shareEmail} onChange={e => setShareEmail(e.target.value)} onKeyDown={e => e.key === "Enter" && addShare()}
+            placeholder="Enter their email address" style={{ ...inputStyle, flex: 1, margin: 0 }} />
+          <button onClick={addShare} style={{ padding: "9px 18px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>Invite</button>
+        </div>
+        {shareMsg && <div style={{ fontSize: 13, color: shareMsg.startsWith("✓") ? "#166534" : "#991b1b", marginBottom: 12 }}>{shareMsg}</div>}
+        {myShares.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <div style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8 }}>Connected with</div>
+            {myShares.map(s => (
+              <div key={s.shared_with_email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#fafaf8", borderRadius: 8, marginBottom: 6, border: "1px solid #efefec" }}>
+                <span style={{ fontSize: 13, color: "#555" }}>{s.shared_with_email}</span>
+                <button onClick={() => removeShare(s.shared_with_email)} style={{ fontSize: 12, color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{ marginTop: 20, textAlign: "right" }}>
+          <button onClick={() => { setShareModal(false); setShareEmail(""); setShareMsg(""); }}
+            style={{ padding: "9px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#666", fontSize: 13, cursor: "pointer" }}>Done</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+  // ── HOME PAGE ──
   if (view === "home") {
-    const myAppCount = myApps.length;
     const myInterviews = myApps.filter(a => a.status === "Interview").length;
     const myOffers = myApps.filter(a => a.status === "Offer").length;
 
     return (
       <div style={{ minHeight: "100vh", background: "#fafaf8", fontFamily: "'Georgia', serif" }}>
-        {/* Nav */}
         <div style={{ background: "#0f0f0f", padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
           <span style={{ color: "#fff", fontSize: 15, letterSpacing: "0.05em" }}>AppTrackr</span>
-          <UserButton afterSignOutUrl="/" />
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <NotifBell />
+            <UserButton afterSignOutUrl="/" />
+          </div>
         </div>
 
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "48px 24px" }}>
-          {/* Welcome */}
-          <div style={{ marginBottom: 48 }}>
+        <div style={{ maxWidth: 1000, margin: "0 auto", padding: "40px 24px" }}>
+          <div style={{ marginBottom: 36 }}>
             <div style={{ fontSize: 11, letterSpacing: "0.25em", color: "#aaa", textTransform: "uppercase", marginBottom: 8 }}>Welcome back</div>
-            <div style={{ fontSize: 36, color: "#1a1a1a", fontWeight: 400, letterSpacing: "-0.01em" }}>{myName}</div>
+            <div style={{ fontSize: 34, color: "#1a1a1a", fontWeight: 400, letterSpacing: "-0.01em" }}>{myName}</div>
           </div>
 
-          {/* My Tracker Card */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, letterSpacing: "0.2em", color: "#aaa", textTransform: "uppercase", marginBottom: 12 }}>Your Tracker</div>
-            <div style={{ background: "#0f0f0f", borderRadius: 16, padding: "28px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+          {/* Top row — My Tracker + Bar Chart */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div style={{ background: "#0f0f0f", borderRadius: 16, padding: "24px 28px", cursor: "pointer" }}
               onClick={() => { setView("mine"); setViewingApps(myApps); fetchCommentsForApps(myApps); }}>
-              <div>
-                <div style={{ color: "#fff", fontSize: 20, marginBottom: 12 }}>My Tracker</div>
-                <div style={{ display: "flex", gap: 24 }}>
-                  <div><div style={{ fontSize: 28, color: "#fff", fontWeight: 400 }}>{myAppCount}</div><div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>Applications</div></div>
-                  <div><div style={{ fontSize: 28, color: "#fcd88a", fontWeight: 400 }}>{myInterviews}</div><div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>Interviews</div></div>
-                  <div><div style={{ fontSize: 28, color: "#86efac", fontWeight: 400 }}>{myOffers}</div><div style={{ fontSize: 11, color: "#666", marginTop: 2 }}>Offers</div></div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+                <div style={{ color: "#fff", fontSize: 16 }}>My Tracker</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={e => { e.stopPropagation(); setShareModal(true); }}
+                    style={{ padding: "5px 12px", border: "1px solid #333", borderRadius: 6, background: "transparent", color: "#888", fontSize: 12, cursor: "pointer" }}>
+                    Share
+                  </button>
+                  <button style={{ padding: "5px 12px", border: "none", borderRadius: 6, background: "#fff", color: "#0f0f0f", fontSize: 12, cursor: "pointer" }}>Open →</button>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={e => { e.stopPropagation(); setShareModal(true); }}
-                  style={{ padding: "8px 18px", border: "1px solid #333", borderRadius: 8, background: "transparent", color: "#888", fontSize: 13, cursor: "pointer" }}>
-                  Share
-                </button>
-                <button onClick={() => { setView("mine"); setViewingApps(myApps); fetchCommentsForApps(myApps); }}
-                  style={{ padding: "8px 18px", border: "none", borderRadius: 8, background: "#fff", color: "#0f0f0f", fontSize: 13, cursor: "pointer" }}>
-                  Open →
-                </button>
+              <div style={{ display: "flex", gap: 28 }}>
+                <div><div style={{ fontSize: 32, color: "#fff", fontWeight: 300 }}>{myApps.length}</div><div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>Applications</div></div>
+                <div><div style={{ fontSize: 32, color: "#fcd88a", fontWeight: 300 }}>{myInterviews}</div><div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>Interviews</div></div>
+                <div><div style={{ fontSize: 32, color: "#86efac", fontWeight: 300 }}>{myOffers}</div><div style={{ fontSize: 11, color: "#555", marginTop: 2 }}>Offers</div></div>
               </div>
+            </div>
+
+            <div style={{ background: "#fff", borderRadius: 16, padding: "24px 28px", border: "1px solid #e8e8e4" }}>
+              <div style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 16 }}>Applications by Person</div>
+              {barData.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#ccc", paddingTop: 8 }}>Share your tracker with others to see comparisons.</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={120}>
+                  <BarChart data={barData} barCategoryGap="30%">
+                    <XAxis dataKey="name" tick={{ fontSize: 11, fontFamily: "Georgia, serif", fill: "#aaa" }} axisLine={false} tickLine={false} />
+                    <YAxis hide />
+                    <Tooltip contentStyle={{ fontFamily: "Georgia, serif", fontSize: 12, border: "1px solid #e8e8e4", borderRadius: 8 }} formatter={v => [v, "Applications"]} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                      {barData.map((_, i) => <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
           </div>
 
-          {/* Total View Card — only show if someone shared with me */}
+          {/* Total View */}
           {sharedWithMe.length > 0 && (
-            <div style={{ marginBottom: 32 }}>
-              <div style={{ background: "#fff", border: "1px solid #e8e8e4", borderRadius: 16, padding: "20px 28px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+            <>
+              <div style={{ background: "#fff", border: "1px solid #e8e8e4", borderRadius: 14, padding: "16px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", marginBottom: 12 }}
                 onClick={() => { setView("total"); setStatusFilter("All"); }}>
                 <div>
-                  <div style={{ color: "#1a1a1a", fontSize: 16, marginBottom: 4 }}>Total View</div>
-                  <div style={{ fontSize: 13, color: "#aaa" }}>Combined view of your tracker + trackers shared with you</div>
+                  <div style={{ color: "#1a1a1a", fontSize: 14, marginBottom: 2 }}>Total View</div>
+                  <div style={{ fontSize: 12, color: "#aaa" }}>Combined view of all trackers shared with you</div>
                 </div>
-                <button style={{ padding: "8px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#555", fontSize: 13, cursor: "pointer" }}>
-                  Open →
-                </button>
+                <button style={{ padding: "6px 14px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#555", fontSize: 12, cursor: "pointer" }}>Open →</button>
               </div>
-            </div>
-          )}
 
-          {/* Shared With Me */}
-          {sharedWithMe.length > 0 && (
-            <div>
-              <div style={{ fontSize: 11, letterSpacing: "0.2em", color: "#aaa", textTransform: "uppercase", marginBottom: 12 }}>Shared With You</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
-                {sharedWithMe.map(s => {
+              <div style={{ fontSize: 11, letterSpacing: "0.2em", color: "#aaa", textTransform: "uppercase", marginBottom: 10 }}>Shared With You</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10, marginBottom: 20 }}>
+                {sharedWithMe.map((s, i) => {
                   const label = s.owner_email.split("@")[0];
                   return (
-                    <div key={s.owner_email}
-                      onClick={() => { setView(s.owner_email); setStatusFilter("All"); }}
-                      style={{ background: "#fff", border: "1px solid #e8e8e4", borderRadius: 16, padding: "20px 24px", cursor: "pointer", transition: "box-shadow 0.15s" }}
-                      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 20px rgba(0,0,0,0.08)"}
+                    <div key={s.owner_email} onClick={() => { setView(s.owner_email); setStatusFilter("All"); }}
+                      style={{ background: "#fff", border: "1px solid #e8e8e4", borderRadius: 14, padding: "14px 18px", cursor: "pointer", display: "flex", alignItems: "center", gap: 12 }}
+                      onMouseEnter={e => e.currentTarget.style.boxShadow = "0 4px 16px rgba(0,0,0,0.07)"}
                       onMouseLeave={e => e.currentTarget.style.boxShadow = "none"}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                        <div>
-                          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#0f0f0f", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 15, marginBottom: 12 }}>
-                            {label[0].toUpperCase()}
-                          </div>
-                          <div style={{ fontSize: 16, color: "#1a1a1a", marginBottom: 4 }}>{label}'s Tracker</div>
-                          <div style={{ fontSize: 12, color: "#bbb" }}>{s.owner_email}</div>
-                        </div>
-                        <span style={{ fontSize: 18, color: "#ccc" }}>→</span>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: BAR_COLORS[(i + 1) % BAR_COLORS.length], display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 13, flexShrink: 0 }}>
+                        {label[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, color: "#1a1a1a" }}>{label}'s Tracker</div>
+                        <div style={{ fontSize: 11, color: "#bbb", marginTop: 1 }}>{s.owner_email}</div>
                       </div>
                     </div>
                   );
                 })}
               </div>
-            </div>
+            </>
           )}
 
           {sharedWithMe.length === 0 && (
-            <div style={{ marginTop: 8, padding: "24px", border: "1px dashed #e0e0dc", borderRadius: 16, textAlign: "center", color: "#ccc", fontSize: 13 }}>
-              No one has shared their tracker with you yet.
+            <div style={{ marginBottom: 20, padding: "18px 22px", border: "1px dashed #e0e0dc", borderRadius: 14, textAlign: "center", color: "#ccc", fontSize: 13 }}>
+              No one has shared their tracker with you yet. Share yours first!
             </div>
           )}
-        </div>
 
-        {/* Share Modal */}
-        {shareModal && (
-          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-            <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
-              <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 6, fontWeight: 400 }}>Share Your Tracker</div>
-              <div style={{ fontSize: 13, color: "#999", marginBottom: 20 }}>People you invite can view your applications and leave comments.</div>
-              <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-                <input value={shareEmail} onChange={e => setShareEmail(e.target.value)}
-                  onKeyDown={e => e.key === "Enter" && addShare()}
-                  placeholder="Enter their email address"
-                  style={{ ...inputStyle, flex: 1, margin: 0 }} />
-                <button onClick={addShare}
-                  style={{ padding: "9px 18px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
-                  Invite
-                </button>
-              </div>
-              {shareMsg && <div style={{ fontSize: 13, color: shareMsg.startsWith("✓") ? "#166534" : "#991b1b", marginBottom: 12 }}>{shareMsg}</div>}
-              {myShares.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8 }}>Shared with</div>
-                  {myShares.map(s => (
-                    <div key={s.shared_with_email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#fafaf8", borderRadius: 8, marginBottom: 6, border: "1px solid #efefec" }}>
-                      <span style={{ fontSize: 13, color: "#555" }}>{s.shared_with_email}</span>
-                      <button onClick={() => removeShare(s.shared_with_email)} style={{ fontSize: 12, color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
-                    </div>
-                  ))}
+          {/* Activity Log */}
+          <div style={{ background: "#fff", borderRadius: 16, border: "1px solid #e8e8e4", overflow: "hidden" }}>
+            <div style={{ padding: "14px 22px", borderBottom: "1px solid #f0f0ec", fontSize: 11, color: "#aaa", letterSpacing: "0.1em", textTransform: "uppercase" }}>Recent Activity</div>
+            {activity.length === 0 ? (
+              <div style={{ padding: "24px", fontSize: 13, color: "#ccc", textAlign: "center" }}>No activity yet.</div>
+            ) : activity.map((a, i) => {
+              const name = a.person_name || a.person.split("@")[0];
+              const isMe = a.person === myEmail;
+              const sc = STATUS_COLORS[a.status] || {};
+              return (
+                <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "11px 22px", borderBottom: i < activity.length - 1 ? "1px solid #f5f5f2" : "none" }}>
+                  <div style={{ width: 28, height: 28, borderRadius: "50%", background: isMe ? "#0f0f0f" : BAR_COLORS[1], display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 11, flexShrink: 0 }}>
+                    {name[0].toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, color: "#333", fontWeight: 500 }}>{isMe ? "You" : name}</span>
+                    <span style={{ fontSize: 13, color: "#888" }}> applied to </span>
+                    <span style={{ fontSize: 13, color: "#333", fontWeight: 500 }}>{a.company}</span>
+                    <span style={{ fontSize: 13, color: "#888" }}> — {a.role}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
+                    <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, whiteSpace: "nowrap" }}>{a.status}</span>
+                    <span style={{ fontSize: 11, color: "#ccc", whiteSpace: "nowrap" }}>{timeAgo(a.created_at)}</span>
+                  </div>
                 </div>
-              )}
-              <div style={{ marginTop: 20, textAlign: "right" }}>
-                <button onClick={() => { setShareModal(false); setShareEmail(""); setShareMsg(""); }}
-                  style={{ padding: "9px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#666", fontSize: 13, cursor: "pointer" }}>
-                  Done
-                </button>
-              </div>
-            </div>
+              );
+            })}
           </div>
-        )}
+        </div>
+        <ShareModal />
       </div>
     );
   }
 
+  // ── TRACKER VIEW ──
   return (
     <div style={{ minHeight: "100vh", background: "#fafaf8", fontFamily: "'Georgia', serif" }}>
-      {/* Top Nav */}
       <div style={{ background: "#0f0f0f", padding: "0 32px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 56 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <button onClick={() => setView("home")} style={{ color: "#666", background: "none", border: "none", cursor: "pointer", fontSize: 13, padding: 0 }}>← Home</button>
@@ -410,43 +483,38 @@ function Tracker() {
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           {isMyTracker && (
-            <button onClick={() => setShareModal(true)}
-              style={{ padding: "6px 16px", borderRadius: 6, border: "1px solid #444", background: "transparent", color: "#ccc", fontSize: 13, cursor: "pointer" }}>
+            <button onClick={() => setShareModal(true)} style={{ padding: "6px 16px", borderRadius: 6, border: "1px solid #444", background: "transparent", color: "#ccc", fontSize: 13, cursor: "pointer" }}>
               Share Tracker
             </button>
           )}
+          <NotifBell />
           <UserButton afterSignOutUrl="/" />
         </div>
       </div>
 
       <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px" }}>
-        {/* Header */}
-        <div style={{ marginBottom: 28, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div style={{ marginBottom: 24, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>
             <div style={{ fontSize: 11, letterSpacing: "0.25em", color: "#999", textTransform: "uppercase", marginBottom: 6 }}>
-              {view === "mine" ? `${myName}` : view === "total" ? "Combined View" : `${view.split("@")[0]}'s Tracker`}
+              {view === "mine" ? myName : view === "total" ? "Combined View" : `${view.split("@")[0]}'s Tracker`}
             </div>
-            <div style={{ fontSize: 30, color: "#1a1a1a", fontWeight: 400 }}>
-              {viewingApps.length} Application{viewingApps.length !== 1 ? "s" : ""}
-            </div>
+            <div style={{ fontSize: 30, color: "#1a1a1a", fontWeight: 400 }}>{viewingApps.length} Application{viewingApps.length !== 1 ? "s" : ""}</div>
           </div>
-          {canEdit && (
+          {isMyTracker && (
             <button onClick={() => { setForm(EMPTY_FORM); setEditId(null); setModal(true); }}
-              style={{ padding: "10px 22px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer", letterSpacing: "0.02em" }}>
+              style={{ padding: "10px 22px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
               + Add Application
             </button>
           )}
         </div>
 
-        {/* Status summary pills */}
         <div style={{ display: "flex", gap: 8, marginBottom: 24, flexWrap: "wrap" }}>
           <button onClick={() => setStatusFilter("All")}
             style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${statusFilter === "All" ? "#0f0f0f" : "#ddd"}`, background: statusFilter === "All" ? "#0f0f0f" : "#fff", color: statusFilter === "All" ? "#fff" : "#666", fontSize: 12, cursor: "pointer" }}>
             All ({viewingApps.length})
           </button>
           {STATUSES.filter(s => statusCounts[s] > 0).map(s => {
-            const c = STATUS_COLORS[s];
-            const active = statusFilter === s;
+            const c = STATUS_COLORS[s]; const active = statusFilter === s;
             return (
               <button key={s} onClick={() => setStatusFilter(statusFilter === s ? "All" : s)}
                 style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${active ? c.border : "#ddd"}`, background: active ? c.bg : "#fff", color: active ? c.text : "#666", fontSize: 12, cursor: "pointer" }}>
@@ -456,10 +524,9 @@ function Tracker() {
           })}
         </div>
 
-        {/* Table */}
         {filtered.length === 0 ? (
           <div style={{ textAlign: "center", padding: "80px 0", color: "#aaa", fontSize: 15 }}>
-            {canEdit ? "No applications yet. Add your first one →" : "Nothing here yet."}
+            {isMyTracker ? "No applications yet. Add your first one →" : "Nothing here yet."}
           </div>
         ) : (
           <div style={{ background: "#fff", borderRadius: 12, border: "1px solid #e8e8e4", overflow: "hidden" }}>
@@ -483,32 +550,17 @@ function Tracker() {
                   const appComments = comments[app.id] || [];
                   const expanded = expandedComments[app.id];
                   const isOwner = app.person === myEmail;
-                  // Can comment if: this is my tracker, total view, or viewing someone's shared tracker
-                  const canComment = true;
-
                   return (
                     <>
                       <tr key={app.id} style={{ borderBottom: expanded ? "none" : "1px solid #f5f5f2", background: i % 2 === 0 ? "#fff" : "#fdfdfc" }}>
                         {view === "total" && (
-                          <td style={tdStyle}>
-                            <span style={{ fontSize: 12, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>
-                              {(app.person_name || app.person.split("@")[0])}
-                            </span>
-                          </td>
+                          <td style={tdStyle}><span style={{ fontSize: 12, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>{app.person_name || app.person.split("@")[0]}</span></td>
                         )}
                         <td style={{ ...tdStyle, fontWeight: 500, color: "#1a1a1a" }}>{app.company}</td>
                         <td style={{ ...tdStyle, color: "#555" }}>{app.role}</td>
-                        <td style={tdStyle}>
-                          <span style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 12, background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, whiteSpace: "nowrap" }}>
-                            {app.status}
-                          </span>
-                        </td>
-                        <td style={tdStyle}>
-                          {app.alignment ? <span style={{ fontSize: 11, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>{app.alignment}</span> : <span style={{ color: "#ddd" }}>—</span>}
-                        </td>
-                        <td style={tdStyle}>
-                          {app.impact ? <span style={{ fontSize: 11, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>{app.impact}</span> : <span style={{ color: "#ddd" }}>—</span>}
-                        </td>
+                        <td style={tdStyle}><span style={{ fontSize: 11, fontWeight: 500, padding: "3px 9px", borderRadius: 12, background: sc.bg, color: sc.text, border: `1px solid ${sc.border}`, whiteSpace: "nowrap" }}>{app.status}</span></td>
+                        <td style={tdStyle}>{app.alignment ? <span style={{ fontSize: 11, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>{app.alignment}</span> : <span style={{ color: "#ddd" }}>—</span>}</td>
+                        <td style={tdStyle}>{app.impact ? <span style={{ fontSize: 11, color: "#888", background: "#f5f5f2", padding: "2px 8px", borderRadius: 4 }}>{app.impact}</span> : <span style={{ color: "#ddd" }}>—</span>}</td>
                         <td style={{ ...tdStyle, color: "#aaa", fontSize: 12, whiteSpace: "nowrap" }}>{fmt(app.date)}</td>
                         <td style={{ ...tdStyle, color: "#888", fontSize: 12, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={app.notes}>{app.notes || "—"}</td>
                         <td style={{ ...tdStyle, textAlign: "right", whiteSpace: "nowrap" }}>
@@ -525,9 +577,9 @@ function Tracker() {
                         </td>
                       </tr>
                       {expanded && (
-                        <tr key={`${app.id}-comments`} style={{ borderBottom: "1px solid #f5f5f2" }}>
+                        <tr key={`${app.id}-c`} style={{ borderBottom: "1px solid #f5f5f2" }}>
                           <td colSpan={view === "total" ? 9 : 8} style={{ padding: "12px 20px 16px", background: "#fafaf8" }}>
-                            <div style={{ fontSize: 12, color: "#999", marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase" }}>Comments</div>
+                            <div style={{ fontSize: 11, color: "#999", marginBottom: 8, letterSpacing: "0.1em", textTransform: "uppercase" }}>Comments</div>
                             {appComments.length === 0 && <div style={{ fontSize: 13, color: "#ccc", marginBottom: 10 }}>No comments yet.</div>}
                             {appComments.map(c => (
                               <div key={c.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8, background: "#fff", borderRadius: 8, padding: "8px 12px", border: "1px solid #efefec" }}>
@@ -536,23 +588,14 @@ function Tracker() {
                                   <span style={{ fontSize: 13, color: "#333" }}>{c.text}</span>
                                   <div style={{ fontSize: 11, color: "#ccc", marginTop: 2 }}>{fmt(c.created_at)}</div>
                                 </div>
-                                {isOwner && (
-                                  <button onClick={() => deleteComment(c.id, app.id)} style={{ fontSize: 11, color: "#ef4444", background: "none", border: "none", cursor: "pointer", marginLeft: 12, flexShrink: 0 }}>✕</button>
-                                )}
+                                {isOwner && <button onClick={() => deleteComment(c.id)} style={{ fontSize: 11, color: "#ef4444", background: "none", border: "none", cursor: "pointer", marginLeft: 12, flexShrink: 0 }}>✕</button>}
                               </div>
                             ))}
                             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                              <input
-                                value={commentText[app.id] || ""}
-                                onChange={e => setCommentText(prev => ({ ...prev, [app.id]: e.target.value }))}
-                                onKeyDown={e => e.key === "Enter" && postComment(app.id)}
-                                placeholder="Add a comment…"
-                                style={{ flex: 1, border: "1px solid #e0e0dc", borderRadius: 6, padding: "7px 12px", fontSize: 13, outline: "none", fontFamily: "Georgia, serif", background: "#fff" }}
-                              />
-                              <button onClick={() => postComment(app.id)}
-                                style={{ padding: "7px 16px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>
-                                Post
-                              </button>
+                              <input value={commentText[app.id] || ""} onChange={e => setCommentText(prev => ({ ...prev, [app.id]: e.target.value }))}
+                                onKeyDown={e => e.key === "Enter" && postComment(app.id)} placeholder="Add a comment…"
+                                style={{ flex: 1, border: "1px solid #e0e0dc", borderRadius: 6, padding: "7px 12px", fontSize: 13, outline: "none", fontFamily: "Georgia, serif", background: "#fff" }} />
+                              <button onClick={() => postComment(app.id)} style={{ padding: "7px 16px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 6, fontSize: 13, cursor: "pointer" }}>Post</button>
                             </div>
                           </td>
                         </tr>
@@ -572,140 +615,30 @@ function Tracker() {
           <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 440, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
             <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 20, fontWeight: 400 }}>{editId ? "Edit Application" : "New Application"}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {[
-                { label: "Company *", key: "company", placeholder: "e.g. Google" },
-                { label: "Role *", key: "role", placeholder: "e.g. Software Engineer" },
-              ].map(f => (
-                <div key={f.key}>
-                  <label style={labelStyle}>{f.label}</label>
-                  <input value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })}
-                    placeholder={f.placeholder} style={inputStyle} />
-                </div>
+              {[{ label: "Company *", key: "company", placeholder: "e.g. Google" }, { label: "Role *", key: "role", placeholder: "e.g. Software Engineer" }].map(f => (
+                <div key={f.key}><label style={labelStyle}>{f.label}</label><input value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} placeholder={f.placeholder} style={inputStyle} /></div>
               ))}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-                <div>
-                  <label style={labelStyle}>Status</label>
-                  <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={inputStyle}>
-                    {STATUSES.map(s => <option key={s}>{s}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>Fit</label>
-                  <select value={form.alignment} onChange={e => setForm({ ...form, alignment: e.target.value })} style={inputStyle}>
-                    {ALIGNMENT.map(s => <option key={s} value={s}>{s || "—"}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={labelStyle}>Priority</label>
-                  <select value={form.impact} onChange={e => setForm({ ...form, impact: e.target.value })} style={inputStyle}>
-                    {IMPACT.map(s => <option key={s} value={s}>{s || "—"}</option>)}
-                  </select>
-                </div>
+                <div><label style={labelStyle}>Status</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={inputStyle}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
+                <div><label style={labelStyle}>Fit</label><select value={form.alignment} onChange={e => setForm({ ...form, alignment: e.target.value })} style={inputStyle}>{ALIGNMENT.map(s => <option key={s} value={s}>{s || "—"}</option>)}</select></div>
+                <div><label style={labelStyle}>Priority</label><select value={form.impact} onChange={e => setForm({ ...form, impact: e.target.value })} style={inputStyle}>{IMPACT.map(s => <option key={s} value={s}>{s || "—"}</option>)}</select></div>
               </div>
-              <div>
-                <label style={labelStyle}>Date Applied</label>
-                <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} />
-              </div>
-              <div>
-                <label style={labelStyle}>Notes</label>
-                <input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Optional" style={inputStyle} />
-              </div>
+              <div><label style={labelStyle}>Date Applied</label><input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} style={inputStyle} /></div>
+              <div><label style={labelStyle}>Notes</label><input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Optional" style={inputStyle} /></div>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-              <button onClick={() => { setModal(false); setEditId(null); }}
-                style={{ padding: "9px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#666", fontSize: 13, cursor: "pointer" }}>
-                Cancel
-              </button>
-              <button onClick={save}
-                style={{ padding: "9px 18px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>
-                {editId ? "Save Changes" : "Add Application"}
-              </button>
+              <button onClick={() => { setModal(false); setEditId(null); }} style={{ padding: "9px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#666", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              <button onClick={save} style={{ padding: "9px 18px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer" }}>{editId ? "Save Changes" : "Add Application"}</button>
             </div>
           </div>
         </div>
       )}
-
-      {/* Share Modal */}
-      {shareModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
-          <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
-            <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 6, fontWeight: 400 }}>Share Your Tracker</div>
-            <div style={{ fontSize: 13, color: "#999", marginBottom: 20 }}>People you invite can view your applications and leave comments.</div>
-
-            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-              <input value={shareEmail} onChange={e => setShareEmail(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && addShare()}
-                placeholder="Enter their email address"
-                style={{ ...inputStyle, flex: 1, margin: 0 }} />
-              <button onClick={addShare}
-                style={{ padding: "9px 18px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
-                Invite
-              </button>
-            </div>
-            {shareMsg && <div style={{ fontSize: 13, color: shareMsg.startsWith("✓") ? "#166534" : "#991b1b", marginBottom: 12 }}>{shareMsg}</div>}
-
-            {myShares.length > 0 && (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ fontSize: 11, color: "#aaa", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8 }}>Shared with</div>
-                {myShares.map(s => (
-                  <div key={s.shared_with_email} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#fafaf8", borderRadius: 8, marginBottom: 6, border: "1px solid #efefec" }}>
-                    <span style={{ fontSize: 13, color: "#555" }}>{s.shared_with_email}</span>
-                    <button onClick={() => removeShare(s.shared_with_email)}
-                      style={{ fontSize: 12, color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ marginTop: 20, textAlign: "right" }}>
-              <button onClick={() => { setShareModal(false); setShareEmail(""); setShareMsg(""); }}
-                style={{ padding: "9px 18px", border: "1px solid #e0e0dc", borderRadius: 8, background: "#fff", color: "#666", fontSize: 13, cursor: "pointer" }}>
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ShareModal />
     </div>
   );
 }
 
-const thStyle = {
-  padding: "11px 16px",
-  textAlign: "left",
-  fontSize: 11,
-  fontWeight: 500,
-  color: "#aaa",
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  fontFamily: "Georgia, serif",
-};
-
-const tdStyle = {
-  padding: "12px 16px",
-  fontSize: 13,
-  fontFamily: "Georgia, serif",
-  verticalAlign: "top",
-};
-
-const labelStyle = {
-  display: "block",
-  fontSize: 11,
-  color: "#999",
-  marginBottom: 5,
-  letterSpacing: "0.05em",
-};
-
-const inputStyle = {
-  width: "100%",
-  border: "1px solid #e0e0dc",
-  borderRadius: 8,
-  padding: "8px 12px",
-  fontSize: 13,
-  outline: "none",
-  fontFamily: "Georgia, serif",
-  background: "#fff",
-  boxSizing: "border-box",
-};
+const thStyle = { padding: "11px 16px", textAlign: "left", fontSize: 11, fontWeight: 500, color: "#aaa", letterSpacing: "0.08em", textTransform: "uppercase", fontFamily: "Georgia, serif" };
+const tdStyle = { padding: "12px 16px", fontSize: 13, fontFamily: "Georgia, serif", verticalAlign: "top" };
+const labelStyle = { display: "block", fontSize: 11, color: "#999", marginBottom: 5, letterSpacing: "0.05em" };
+const inputStyle = { width: "100%", border: "1px solid #e0e0dc", borderRadius: 8, padding: "8px 12px", fontSize: 13, outline: "none", fontFamily: "Georgia, serif", background: "#fff", boxSizing: "border-box" };
