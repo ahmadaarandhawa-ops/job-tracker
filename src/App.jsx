@@ -316,8 +316,8 @@ function Tracker() {
     </div>
   );
 
-  // ── Share Modal ──
-  const ShareModal = () => !shareModal ? null : (
+  // ── Share Modal (plain JSX) ──
+  const shareModal_jsx = !shareModal ? null : (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 420, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
         <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 6, fontWeight: 400 }}>Share Your Tracker</div>
@@ -347,15 +347,14 @@ function Tracker() {
     </div>
   );
 
-  // ── Add/Edit Modal ──
-  const AppModal = () => !modal ? null : (
+  // ── Add/Edit Modal (plain JSX, not a component — avoids focus loss bug) ──
+  const appModal = !modal ? null : (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: 28, width: 440, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
         <div style={{ fontSize: 18, color: "#1a1a1a", marginBottom: 20, fontWeight: 400 }}>{editId ? "Edit Application" : "New Application"}</div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {[{ label: "Company *", key: "company", placeholder: "e.g. Google" }, { label: "Role *", key: "role", placeholder: "e.g. Software Engineer" }].map(f => (
-            <div key={f.key}><label style={labelStyle}>{f.label}</label><input value={form[f.key]} onChange={e => setForm({ ...form, [f.key]: e.target.value })} placeholder={f.placeholder} style={inputStyle} /></div>
-          ))}
+          <div><label style={labelStyle}>Company *</label><input value={form.company} onChange={e => setForm({ ...form, company: e.target.value })} placeholder="e.g. Google" style={inputStyle} /></div>
+          <div><label style={labelStyle}>Role *</label><input value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} placeholder="e.g. Software Engineer" style={inputStyle} /></div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div><label style={labelStyle}>Status</label><select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })} style={inputStyle}>{STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
             <div><label style={labelStyle}>Fit</label><select value={form.alignment} onChange={e => setForm({ ...form, alignment: e.target.value })} style={inputStyle}>{ALIGNMENT.map(s => <option key={s} value={s}>{s || "—"}</option>)}</select></div>
@@ -639,8 +638,8 @@ function Tracker() {
         )}
       </div>
 
-      <AppModal />
-      <ShareModal />
+      {appModal}
+      {shareModal_jsx}
     </div>
   );
 }
