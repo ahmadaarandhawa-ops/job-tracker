@@ -8,7 +8,7 @@ const SUPABASE_URL = "https://pvjmzycmvavmntbmudbc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_Zoq88wvCDawDQET4LpAj4w_Mw6vDgRr";
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const STATUSES = ["Applied", "Interview", "Offer", "Rejected", "Withdrawn"];
+const STATUSES = ["Applied", "Interview", "Offer", "Rejected", "Likely Rejected", "Withdrawn"];
 const STAGES = [
   "", "Online Assessment Pending", "Completed Online Assessment",
   "Completed First Round Interview", "Final Round", "Waiting After Final Round"
@@ -19,11 +19,12 @@ const IMPACT = ["", "Low", "Medium", "High"];
 const BAR_COLORS = ["#0f0f0f", "#6366f1", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6"];
 
 const STATUS_COLORS = {
-  Applied:   { bg: "#e8f4fd", text: "#1a6fa8", border: "#b8d9f0" },
-  Interview: { bg: "#dbeafe", text: "#1d4ed8", border: "#93c5fd" },
-  Offer:     { bg: "#e6f9f0", text: "#166534", border: "#86efac" },
-  Rejected:  { bg: "#fde8e8", text: "#991b1b", border: "#fca5a5" },
-  Withdrawn: { bg: "#f3f4f6", text: "#4b5563", border: "#d1d5db" },
+  Applied:        { bg: "#e8f4fd", text: "#1a6fa8", border: "#b8d9f0" },
+  Interview:      { bg: "#dbeafe", text: "#1d4ed8", border: "#93c5fd" },
+  Offer:          { bg: "#e6f9f0", text: "#166534", border: "#86efac" },
+  Rejected:       { bg: "#fde8e8", text: "#991b1b", border: "#fca5a5" },
+  "Likely Rejected": { bg: "#fff7ed", text: "#c2410c", border: "#fdba74" },
+  Withdrawn:      { bg: "#f3f4f6", text: "#4b5563", border: "#d1d5db" },
 };
 
 const EMPTY_FORM = {
@@ -56,8 +57,10 @@ function displayName(app) {
 function rowStyle(app, i) {
   const base = { fontFamily: "Georgia, serif" };
   if (app.status === "Rejected") return { ...base, background: "#fff1f1" };
+  if (app.status === "Likely Rejected") return { ...base, background: "#fff7ed" };
   if (app.stage === "Online Assessment Pending") return { ...base, background: "#fffbeb" };
   if (app.status === "Interview") return { ...base, background: "#eff6ff" };
+  if (app.category === "Event") return { ...base, background: "#f5f3ff" };
   return { ...base, background: i % 2 === 0 ? "#fff" : "#fdfdfc" };
 }
 
@@ -109,6 +112,7 @@ function Tracker() {
   const [commentText, setCommentText] = useState({});
   const [expandedComments, setExpandedComments] = useState({});
   const [statusFilter, setStatusFilter] = useState("All");
+  const [sortMode, setSortMode] = useState("default"); // "default" | "rejected_first" | "rejected_last"
   const [deadlineEdits, setDeadlineEdits] = useState({});
   const notifRef = useRef(null);
 
@@ -297,11 +301,11 @@ function Tracker() {
 
   // Stats for personal tracker summary
   const totalApplied = myApps.length;
-  const totalRejected = myApps.filter(a => a.status === "Rejected").length;
+  const totalRejected = myApps.filter(a => a.status === "Rejected" || a.status === "Likely Rejected").length;
   const totalOffers = myApps.filter(a => a.status === "Offer").length;
   const totalInterviews = myApps.filter(a => a.status === "Interview").length;
   const successRate = totalApplied > 0 ? Math.round((totalOffers / totalApplied) * 100) : 0;
-  const responseRate = totalApplied > 0 ? Math.round(((totalApplied - myApps.filter(a => a.status === "Applied").length) / totalApplied) * 100) : 0;
+  const rejectedRate = totalApplied > 0 ? Math.round((totalRejected / totalApplied) * 100) : 0;
 
   // Assessment deadlines (OA Pending apps with or without deadline)
   const oaPending = myApps.filter(a => a.stage === "Online Assessment Pending");
@@ -420,11 +424,16 @@ function Tracker() {
 
   // ── Applications Table (shared component) ──
   function AppsTable({ apps, showPerson }) {
-    const f = statusFilter === "All" ? apps : apps.filter(a => a.status === statusFilter);
+    const REJECTED_STATUSES = ["Rejected", "Likely Rejected"];
+    let sorted = [...apps];
+    if (sortMode === "rejected_first") sorted.sort((a, b) => REJECTED_STATUSES.includes(b.status) - REJECTED_STATUSES.includes(a.status));
+    else if (sortMode === "rejected_last") sorted.sort((a, b) => REJECTED_STATUSES.includes(a.status) - REJECTED_STATUSES.includes(b.status));
+    const f = statusFilter === "All" ? sorted : sorted.filter(a => a.status === statusFilter);
     const counts = STATUSES.reduce((acc, s) => { acc[s] = apps.filter(a => a.status === s).length; return acc; }, {});
     return (
       <>
-        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button onClick={() => setStatusFilter("All")}
             style={{ padding: "5px 14px", borderRadius: 20, border: `1px solid ${statusFilter === "All" ? "#0f0f0f" : "#ddd"}`, background: statusFilter === "All" ? "#0f0f0f" : "#fff", color: statusFilter === "All" ? "#fff" : "#666", fontSize: 12, cursor: "pointer" }}>
             All ({apps.length})
@@ -438,6 +447,21 @@ function Tracker() {
               </button>
             );
           })}
+          </div>
+          {/* Sort controls */}
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "#aaa", marginRight: 4 }}>Sort:</span>
+            {[
+              { key: "default", label: "Default" },
+              { key: "rejected_first", label: "Rejected First" },
+              { key: "rejected_last", label: "Rejected Last" },
+            ].map(s => (
+              <button key={s.key} onClick={() => setSortMode(s.key)}
+                style={{ padding: "4px 12px", borderRadius: 16, border: `1px solid ${sortMode === s.key ? "#0f0f0f" : "#ddd"}`, background: sortMode === s.key ? "#0f0f0f" : "#fff", color: sortMode === s.key ? "#fff" : "#666", fontSize: 11, cursor: "pointer" }}>
+                {s.label}
+              </button>
+            ))}
+          </div>
         </div>
         {f.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 0", color: "#aaa", fontSize: 15 }}>
@@ -583,7 +607,7 @@ function Tracker() {
                 { label: "Interviews", value: totalInterviews, color: "#1d4ed8" },
                 { label: "Offers", value: totalOffers, color: "#166534" },
                 { label: "Success Rate", value: `${successRate}%`, color: "#166534" },
-                { label: "Response Rate", value: `${responseRate}%`, color: "#1a6fa8" },
+                { label: "Rejected Rate", value: `${rejectedRate}%`, color: "#ef4444" },
               ].map(s => (
                 <div key={s.label} style={{ background: "#fff", border: "1px solid #e8e8e4", borderRadius: 12, padding: "14px 18px", textAlign: "center" }}>
                   <div style={{ fontSize: 26, fontWeight: 400, color: s.color }}>{s.value}</div>
@@ -663,8 +687,10 @@ function Tracker() {
                 {/* Legend */}
                 <div style={{ display: "flex", gap: 12, fontSize: 11, color: "#888", alignItems: "center" }}>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#fff1f1", border: "1px solid #fca5a5", display: "inline-block" }} />Rejected</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#fff7ed", border: "1px solid #fdba74", display: "inline-block" }} />Likely Rejected</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#fffbeb", border: "1px solid #fcd88a", display: "inline-block" }} />⚠️ OA Pending</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#eff6ff", border: "1px solid #93c5fd", display: "inline-block" }} />Interview</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}><span style={{ width: 10, height: 10, borderRadius: 2, background: "#f5f3ff", border: "1px solid #c4b5fd", display: "inline-block" }} />Event</span>
                 </div>
                 <button onClick={() => { setForm(EMPTY_FORM); setEditId(null); setModal(true); }}
                   style={{ padding: "10px 22px", background: "#0f0f0f", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
@@ -759,17 +785,81 @@ function Tracker() {
         )}
 
         {/* ── INDIVIDUAL / TOTAL VIEW ── */}
-        {(tab === "total" || sharedWithMe.some(s => s.owner_email === tab)) && (
-          <>
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 11, letterSpacing: "0.25em", color: "#aaa", textTransform: "uppercase", marginBottom: 6 }}>
-                {tab === "total" ? "Everyone Combined" : `${tab.split("@")[0]}'s Tracker`}
+        {(tab === "total" || sharedWithMe.some(s => s.owner_email === tab)) && (() => {
+          const vTotal = viewingApps.length;
+          const vRejected = viewingApps.filter(a => a.status === "Rejected" || a.status === "Likely Rejected").length;
+          const vOffers = viewingApps.filter(a => a.status === "Offer").length;
+          const vInterviews = viewingApps.filter(a => a.status === "Interview").length;
+          const vSuccess = vTotal > 0 ? Math.round((vOffers / vTotal) * 100) : 0;
+          const vRejectedRate = vTotal > 0 ? Math.round((vRejected / vTotal) * 100) : 0;
+          const vOaPending = viewingApps.filter(a => a.stage === "Online Assessment Pending");
+          return (
+            <>
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 11, letterSpacing: "0.25em", color: "#aaa", textTransform: "uppercase", marginBottom: 6 }}>
+                  {tab === "total" ? "Everyone Combined" : `${tab.split("@")[0]}'s Tracker`}
+                </div>
+                <div style={{ fontSize: 28, color: "#1a1a1a", fontWeight: 400 }}>{vTotal} Application{vTotal !== 1 ? "s" : ""}</div>
               </div>
-              <div style={{ fontSize: 28, color: "#1a1a1a", fontWeight: 400 }}>{viewingApps.length} Application{viewingApps.length !== 1 ? "s" : ""}</div>
-            </div>
-            <AppsTable apps={viewingApps} showPerson={tab === "total"} />
-          </>
-        )}
+              {/* Stats bar */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 24 }}>
+                {[
+                  { label: "Total Applied", value: vTotal, color: "#1a1a1a" },
+                  { label: "Rejected", value: vRejected, color: "#ef4444" },
+                  { label: "Interviews", value: vInterviews, color: "#1d4ed8" },
+                  { label: "Offers", value: vOffers, color: "#166534" },
+                  { label: "Success Rate", value: `${vSuccess}%`, color: "#166534" },
+                  { label: "Rejected Rate", value: `${vRejectedRate}%`, color: "#ef4444" },
+                ].map(s => (
+                  <div key={s.label} style={{ background: "#fff", border: "1px solid #e8e8e4", borderRadius: 12, padding: "14px 18px", textAlign: "center" }}>
+                    <div style={{ fontSize: 26, fontWeight: 400, color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 4, letterSpacing: "0.05em" }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              {/* OA Deadlines */}
+              {vOaPending.length > 0 && (
+                <div style={{ background: "#fff", border: "1px solid #fcd88a", borderRadius: 12, marginBottom: 24, overflow: "hidden" }}>
+                  <div style={{ padding: "14px 20px", background: "#fffbeb", borderBottom: "1px solid #fcd88a", display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>⚠️</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#92400e" }}>Assessment Deadlines</span>
+                  </div>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: "1px solid #fef3e2", background: "#fffdf5" }}>
+                        <th style={{ ...tH, color: "#92400e" }}>Company</th>
+                        <th style={{ ...tH, color: "#92400e" }}>Role</th>
+                        <th style={{ ...tH, color: "#92400e" }}>Deadline</th>
+                        <th style={{ ...tH, color: "#92400e" }}>Days Left</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {vOaPending.map((app, i) => {
+                        const days = daysUntil(app.assessment_deadline);
+                        const urgentColor = days !== null && days <= 3 ? "#ef4444" : days !== null && days <= 7 ? "#f59e0b" : "#166534";
+                        return (
+                          <tr key={app.id} style={{ borderBottom: "1px solid #fef3e2", background: i % 2 === 0 ? "#fff" : "#fffdf7" }}>
+                            <td style={{ ...tD, fontWeight: 600 }}>{app.company}</td>
+                            <td style={{ ...tD, color: "#555" }}>{app.role}</td>
+                            <td style={tD}>{app.assessment_deadline ? fmt(app.assessment_deadline) : <span style={{ color: "#ccc" }}>Not set</span>}</td>
+                            <td style={tD}>
+                              {days !== null ? (
+                                <span style={{ fontSize: 13, fontWeight: 600, color: urgentColor }}>
+                                  {days < 0 ? "Expired" : days === 0 ? "Today!" : `${days}d`}
+                                </span>
+                              ) : <span style={{ color: "#ccc", fontSize: 12 }}>—</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <AppsTable apps={viewingApps} showPerson={tab === "total"} />
+            </>
+          );
+        })()}
       </div>
 
       {appModal}
