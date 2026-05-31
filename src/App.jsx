@@ -203,6 +203,21 @@ function Tracker() {
 
   async function save() {
     if (!form.company || !form.role) return;
+
+    // Clean up the form — only send fields that exist in the DB
+    const payload = {
+      company: form.company,
+      role: form.role,
+      status: form.status,
+      stage: form.stage || null,
+      category: form.category || null,
+      date: form.date || null,
+      notes: form.notes || null,
+      alignment: form.alignment || null,
+      impact: form.impact || null,
+      assessment_deadline: form.stage === "Online Assessment Pending" ? (form.assessment_deadline || null) : null,
+    };
+
     if (editId) {
       if (prevStatus && prevStatus !== form.status) {
         for (const s of myShares) {
@@ -212,10 +227,13 @@ function Tracker() {
           });
         }
       }
-      await supabase.from("applications").update({ ...form }).eq("id", editId);
+      const { error } = await supabase.from("applications").update(payload).eq("id", editId);
+      if (error) { alert(`Save failed: ${error.message}`); return; }
     } else {
-      await supabase.from("applications").insert({ ...form, person: myEmail, person_name: myName });
+      const { error } = await supabase.from("applications").insert({ ...payload, person: myEmail, person_name: myName });
+      if (error) { alert(`Save failed: ${error.message}`); return; }
     }
+
     setModal(false); setForm(EMPTY_FORM); setEditId(null); setPrevStatus(null);
     await fetchMyApps();
     await fetchAllConnectedApps(sharedWithMe);
